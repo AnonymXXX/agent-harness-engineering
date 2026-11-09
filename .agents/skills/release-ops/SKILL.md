@@ -36,8 +36,8 @@ Typical flow:
 
 1. Run `inspect` first.
 2. Review blockers, warnings, pending commits, target branch, and proposed tag.
-3. Run `execute` only when the user has authorized this release scope (including its branch/tag publication) and the script reports no blockers. Inspect-only requests remain read-only; reuse an already confirmed commit list from the current task.
-4. Apply [Batch Confirmation](#batch-confirmation) when the pending-count threshold is exceeded. Reuse explicit current-task authorization for the same exact commit list and target; pass `--confirm-all` with repeated `--commit <sha>` selectors instead of asking again.
+3. Run `execute` only when the user has authorized this release scope (including its branch/tag publication) and the script reports no blockers. Inspect-only requests remain read-only; reuse an already confirmed commit list only within the same release request (see [Execution Rules](#execution-rules)).
+4. Apply [Batch Confirmation](#batch-confirmation) when the pending-count threshold is exceeded. Reuse explicit authorization from the same release request for the same exact commit list and target; pass `--confirm-all` with repeated `--commit <sha>` selectors instead of asking again.
 5. Use `--sync-target` with execute mode when the local target branch may be behind `origin/<target>`; it only fast-forwards when there are no local-only target commits.
 6. After execute mode finishes, the script restores the branch that was checked out before execution when possible.
 7. When one repository contains multiple requested features or disconnected file clusters, inspect them separately if needed, then execute once with repeated `--commit` selectors. Never run `execute` repeatedly for the same repository in one user release request.
@@ -127,6 +127,7 @@ Feature matching details live in `references/matching-rules.md`.
 ## Execution Rules
 
 - Treat the current user release request as the batch boundary. For each repository, finish selection before execution and create exactly one final tag, even when commits belong to multiple features or file clusters.
+- A release request authorizes only the repositories or components the user named and the commits listed or selected when the user made it. A later bug report, fix, feature, or feedback round in the same conversation is a new release request even when the target and tag line are unchanged: run `inspect` again and wait for an explicit release request before `execute`. Never cite an earlier release ("沿用刚才的发布范围") as scope for new commits.
 - Use repeated `--commit` selectors when a single feature selector cannot safely express the whole confirmed set. Explicit commits must be reachable from the source branch, match the selected author, and are reordered into source-branch order automatically.
 - Do not split one repository into sequential tagged releases merely to satisfy feature-cluster matching. If the exact set is still uncertain, stop and ask instead of producing multiple tags.
 - If pending commits after filtering are `0`, report no action needed.
@@ -144,7 +145,7 @@ Feature matching details live in `references/matching-rules.md`.
 
 The pending-count threshold protects unconfirmed release scope; it does not invalidate authorization already given in the current task. Before executing more than five pending commits:
 
-- Inspect the exact pending commit list, repository, source, target, and proposed tag/production effects. Reuse an explicit current-task request approving that same complete list and publication scope, including an earlier `全部执行` tied to the displayed list. Do not ask again solely because the count exceeds five.
+- Inspect the exact pending commit list, repository, source, target, and proposed tag/production effects. Reuse an explicit approval, given within the same release request, of that same complete list and publication scope, including an earlier `全部执行` tied to the displayed list. Do not ask again solely because the count exceeds five.
 - When that authorization exists and all other checks pass, use repeated `--commit <full-sha>` selectors for the confirmed list and `--confirm-all`. The flag records the existing approval; it does not grant permission or bypass other blockers.
 - If the list or publication scope was not confirmed, prepare the concrete list and ask once. Allow confirming all, narrowing the scope, or cancelling; do not force an all-or-nothing choice. A generic `发版` or an inspect-only request is not batch approval.
 - If inspection finds additional candidates, a different target, or newly uncovered side effects outside the approved scope, pause only that release operation for the changed scope. Never silently include new commits or use `--confirm-all` to bypass unresolved scope.
@@ -166,11 +167,12 @@ Stop and ask before continuing when any of these happen:
 - default source branch `uat` is absent
 - `release` and `master` are both absent
 - feature keyword is too vague, such as only `优化`, `修改`, or `调整`
-- fuzzy feature matching finds multiple unrelated clusters and the current task has not confirmed an exact commit set; an already confirmed SHA list follows [Batch Confirmation](#batch-confirmation)
+- fuzzy feature matching finds multiple unrelated clusters and the current release request has not confirmed an exact commit set; an already confirmed SHA list follows [Batch Confirmation](#batch-confirmation)
 - related commits from other authors are detected
 - bump inference is low confidence
 - conflict resolution is not reliable
-- pending commits exceed the confirmation threshold and the exact batch/publication scope lacks current-task confirmation under [Batch Confirmation](#batch-confirmation)
+- pending commits exceed the confirmation threshold and the exact batch/publication scope lacks confirmation in the current release request under [Batch Confirmation](#batch-confirmation)
+- pending commits were created after the release request that would authorize this run, or the latest user message asks for a fix or feature rather than a release
 
 ## Output Shape
 
@@ -182,7 +184,7 @@ Inspect-only mode:
 
 Execute mode:
 
-1. summarize the matched pending commits
+1. summarize the matched pending commits and quote the user message that authorizes this release
 2. report the target branch
 3. report the tag plan
 4. cherry-pick

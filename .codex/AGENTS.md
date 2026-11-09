@@ -21,7 +21,7 @@ Match technical depth to the reader's context. State actions and relationships d
 
 Infer intent and scope from the conversation. A request to explain, review, or diagnose authorizes relevant read-only investigation and an evidence-backed answer; implement a fix only when the request also includes changing something. Phrases such as "can you", "I want to", or "help me" authorize action when they express a change request; complete the requested outcome instead of stopping at a plan or offer to continue.
 
-Reuse authorization already established in the session; resolve routine reversible choices from evidence and continue independent work while a necessary question is pending. Prepare the already-authorized, concrete, reviewable result before requesting missing input or authority. Stop only the operation that depends on that answer. Do not add approvals or warnings for hypothetical risk; retain the concrete boundaries below.
+Reuse authorization already established in the session within the scope it was granted; production-class scope is narrower (see Git Authorization And History). Resolve routine reversible choices from evidence and continue independent work while a necessary question is pending. Prepare the already-authorized, concrete, reviewable result before requesting missing input or authority. Stop only the operation that depends on that answer. Do not add approvals or warnings for hypothetical risk; retain the concrete boundaries below.
 
 Follow the runtime instruction hierarchy. Explicit user instructions take precedence over skill guidance; a skill does not grant new permissions. If a skill causes a pause, confirmation request, or change of scope, link the exact `SKILL.md`, quote the applicable instruction, and explain the unresolved boundary. Do not infer an approval requirement from an optional recommendation.
 
@@ -37,9 +37,7 @@ Keep user-managed skills under `~/.agents/skills`; reserve `~/.codex/skills` for
 
 ## Browser And Web Access
 
-涉及云资源、DNS/子域名解析、代码托管、部署和其他可通过结构化接口完成的操作时，先加载适用 Skill，并按专用 MCP/官方 API → 官方 CLI → 浏览器的顺序选择执行路径。不得因浏览器可用就跳过 Skill、MCP/API 或 CLI；只有前述路径不可用、能力不足，或任务本身需要登录态页面、可视化核验或网页交互时，才使用浏览器。
-
-先发现当前可用的专用 MCP/API；本机 CLI 缺失不代表远端 MCP 不可用。官方文档 MCP、API schema 和 CLI help 能覆盖的查询无需启动浏览器。回退前说明具体缺失能力或连接故障；认证、权限或审批拒绝不得通过更换身份或浏览器绕过。
+涉及云资源、DNS/子域名解析、代码托管、部署和其他可通过结构化接口完成的操作时，先加载适用 Skill，并按专用 MCP/官方 API → 官方 CLI → 浏览器的顺序选择执行路径。不得因浏览器可用就跳过 Skill、MCP/API 或 CLI；只有前述路径不可用、能力不足，或任务本身需要登录态页面、可视化核验或网页交互时，才使用浏览器。先发现当前可用的专用 MCP/API；本机 CLI 缺失不代表远端 MCP 不可用。官方文档 MCP、API schema 和 CLI help 能覆盖的查询无需启动浏览器。回退前说明具体缺失能力或连接故障；认证、权限或审批拒绝不得通过更换身份或浏览器绕过。
 
 需要浏览器的联网调研、网页读取、登录态操作和本地页面验证使用当前平台自带的浏览器能力，不使用 `ego-browser`（ego lite）：
 
@@ -83,12 +81,13 @@ For UI, frontend, styling, or visual-design work, read project-root `DESIGN.md` 
 - Require explicit approval before permanent deletion, bulk overwrite, or Git operations that can discard commits, stashes, untracked files, or uncommitted changes.
 - Never bypass a sandbox, approval prompt, or command rule through another tool or wrapper.
 - Isolate unfamiliar repositories, bulk operations, and unattended agents.
+- Before any command or write against a remote environment (JumpServer asset, SSH host, `kubectl` context, database, Nacos namespace, cloud console), read its environment from the asset name, group, context, or namespace, state it in the progress update, and confirm it matches the environment the user asked for. Use a production target only when the user asked for production in this operation. On a mismatch or doubt, do not run it: switch to the matching target, or ask when none is identified.
 
 ## Git Authorization And History
 
 Use [Git Worktree Workflow](docs/workflows/git-worktree.md) for task isolation, commit convergence, preflight, integration, and cleanup. One requirement and its continuous feedback should contribute one final content commit; keep unrelated work separate. Load `git-auto-commit` before creating or amending any commit, including automatic completion commits, and follow its message rules: a Chinese subject under 50 characters naming the most important change, with secondary changes in the body. Never automatically rewrite shared history or an integrated target.
 
-Normal non-forced pushes to `origin/dev`, `origin/develop`, `origin/test`, and `origin/uat`, including known non-production CI/deployment effects, have persistent authorization after required validation and preflight. Extensions require the workflow's user-confirmed repository allowlist and bounded existing non-production targets on `origin`. A project or current-task prohibition overrides persistent authorization. Other remotes, production targets/effects, tags, force pushes, and MR/PR creation or merge require explicit authorization.
+Normal non-forced pushes to `origin/dev`, `origin/develop`, `origin/test`, and `origin/uat`, including known non-production CI/deployment effects, have persistent authorization after required validation and preflight. Extensions require the workflow's user-confirmed repository allowlist and bounded existing non-production targets on `origin`. A project or current-task prohibition overrides persistent authorization. Other remotes, production targets/effects, tags, force pushes, and MR/PR creation or merge require explicit authorization. Explicit authorization for a production target or effect, tag, or force push covers only the request that granted it: the named repositories or components, the target, and the commits in scope at that moment. A later fix, feature, or feedback round in the same session, and any commit created after the grant, needs a new explicit request; never carry it forward as "the same release scope". Push, force-push, or release authorization never implies changing branch protection, repository settings, or other platform permissions; ask for those by name.
 
 Validated commits and [Local Auto-Merge](docs/workflows/git-worktree.md#local-auto-merge) are default completion steps; do not wait for another merge prompt. Local `main/master` merges do not grant remote push permission. Complete separately authorized remote integration automatically. `STOP` and `MR_REQUIRED` block the affected integration operation; retain the worktree and report the reason. Stale cleanup follows the workflow's periodic cadence and clean/merged/inactive checks, not every task.
 

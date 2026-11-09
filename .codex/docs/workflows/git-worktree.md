@@ -194,7 +194,7 @@ Stop the affected operation and ask only when necessary input or authorization r
 - A remote High-confidence auto-integration gate is unmet, the remote operation is required for the requested outcome, and no separate current-task authorization covers it. An optional unauthorized push is reported as not performed; it does not block eligible local completion.
 - A rebase or merge conflict requires an unresolved product, contract, ownership, or authorization decision. Resolve mechanical conflicts within the authorized task when repository evidence determines the result, preserve both sides' intended behavior, and rerun relevant validation. Never use conflict resolution to discard user changes, rewrite shared history, or bypass `STOP` or `MR_REQUIRED`.
 - Remote preflight returns `STOP`, target movement repeatedly prevents a stable update, or the remote target is ambiguous.
-- Integration would require force push, reset, rebasing a shared branch, deleting unmerged work, or bypassing required platform approval.
+- Integration would require force push, reset, rebasing a shared branch, deleting unmerged work, changing branch protection or repository settings, or bypassing required platform approval.
 - A remote push is required but neither current-task authorization nor the persistent non-production authorization applies.
 - A branch update is known to trigger production deployment, publication, migration, or another external side effect not covered by the persistent non-production authorization.
 
