@@ -12,7 +12,7 @@ The shared `~/.claude/CLAUDE.md` links to `~/.codex/AGENTS.md` and remains the b
 
 ## Browser
 
-The global Browser And Web Access and Human Verification rules map to Claude's own browsers in Claude Code. The skill/MCP/API → CLI → browser order still applies.
+The global Browser And Web Access and Human Verification rules, and the [Browser Workflow](../../.codex/docs/workflows/browser.md), map to Claude's own browsers in Claude Code. The skill/MCP/API → CLI → browser order still applies.
 
 - Default to the built-in browser pane (`mcp__Claude_Browser__*`).
 - Use Claude in Chrome (`mcp__claude-in-chrome__*`) only when the task needs the user's Chrome sign-ins or the user asks for Chrome.
