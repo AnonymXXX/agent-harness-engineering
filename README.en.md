@@ -90,6 +90,10 @@ Browser work uses Codex's Browser/Chrome plugins or Claude's built-in browser an
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering
 ln -s ~/.local/share/agent-harness-engineering/.codex/AGENTS.md ~/.codex/AGENTS.md
 ln -s ~/.local/share/agent-harness-engineering/.codex/docs ~/.codex/docs
+ln -s ~/.local/share/agent-harness-engineering/.codex/hooks.json ~/.codex/hooks.json
+mkdir -p ~/.claude/rules
+ln -s ~/.local/share/agent-harness-engineering/.claude/rules/harness-platform-adapter.md ~/.claude/rules/
+git -C ~/.local/share/agent-harness-engineering config core.hooksPath .githooks
 for skill in ~/.local/share/agent-harness-engineering/.agents/skills/*; do
   ln -s "$skill" ~/.agents/skills/
 done
@@ -101,6 +105,11 @@ uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py doctor
 If a link target already exists, back it up with `/usr/bin/trash` before linking. The installer does
 not copy or overwrite the machine-specific `~/.codex/config.toml`, credentials, sessions, memory, or
 caches. After installation, start a new Codex task to load the global rules and skills.
+
+`~/.claude/settings.json` holds machine settings and is not linked; merge the hooks from `.claude/settings.hooks.json` into it.
+`core.hooksPath` enables the pre-push check `scripts/check_private_markers.py`. It scans every commit being pushed and rejects the push on
+any match against the private denylist (default `~/.config/agent-harness/public-denylist.txt`, override with
+`HARNESS_PRIVATE_DENYLIST`), and also when that denylist is missing.
 
 Historical releases provide the one-command installer `scripts/harness_setup.py` and `profiles.json`.
 To automate installation, restore those two files from Git history and follow the README of that era.
@@ -119,7 +128,9 @@ Adapted from the [official GPT-6 Astra prompting guidance](https://developers.op
 
 ## Layout
 
-- `.codex/`: global agent rules and Harness workflow documents.
+- `.codex/`: global agent rules, Harness workflow documents, and the Codex hook configuration.
+- `.claude/`: the Claude Code platform adapter and hook fragment.
+- `scripts/`, `.githooks/`: the public repository's pre-push private-marker check.
 - `.agents/skills/`: the Harness skill family and its executable checks.
 
 The repository mirrors paths relative to the user's home directory. Runtime state, sessions,

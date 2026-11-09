@@ -1,0 +1,3 @@
+#!/bin/sh
+# Enabled with `git config core.hooksPath .githooks`; scans every commit being pushed.
+exec python3 "$(git rev-parse --show-toplevel)/scripts/check_private_markers.py" --pre-push

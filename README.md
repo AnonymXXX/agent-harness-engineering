@@ -82,6 +82,10 @@ Codex 只能分析当前任务中你明确授权且本机可访问的内容。�
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering
 ln -s ~/.local/share/agent-harness-engineering/.codex/AGENTS.md ~/.codex/AGENTS.md
 ln -s ~/.local/share/agent-harness-engineering/.codex/docs ~/.codex/docs
+ln -s ~/.local/share/agent-harness-engineering/.codex/hooks.json ~/.codex/hooks.json
+mkdir -p ~/.claude/rules
+ln -s ~/.local/share/agent-harness-engineering/.claude/rules/harness-platform-adapter.md ~/.claude/rules/
+git -C ~/.local/share/agent-harness-engineering config core.hooksPath .githooks
 for skill in ~/.local/share/agent-harness-engineering/.agents/skills/*; do
   ln -s "$skill" ~/.agents/skills/
 done
@@ -93,6 +97,10 @@ uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py doctor
 链接目标已存在时先用 `/usr/bin/trash` 备份再链接；安装器不会复制或覆盖机器相关的
 `~/.codex/config.toml`、凭据、sessions、memory 或 cache。安装完成后，新建一个 Codex 任务以加载
 全局规则和 Skills。
+
+`~/.claude/settings.json` 含本机设置，不做链接；把 `.claude/settings.hooks.json` 中的 hook 合并进去即可。
+`core.hooksPath` 启用推送前检查 `scripts/check_private_markers.py`：它扫描每个待推送提交，命中私有黑名单（默认
+`~/.config/agent-harness/public-denylist.txt`，可用 `HARNESS_PRIVATE_DENYLIST` 指定）即拒绝推送；黑名单缺失时同样拒绝。
 
 历史版本提供一键安装器 `scripts/harness_setup.py` 与 `profiles.json`；如需自动化安装，可从
 Git 历史恢复这两个文件后按当时的 README 使用。
@@ -111,7 +119,9 @@ Git 历史恢复这两个文件后按当时的 README 使用。
 
 ## 目录结构
 
-- `.codex/`：全局 Agent 规则与 Harness 工作流文档。
+- `.codex/`：全局 Agent 规则、Harness 工作流文档与 Codex hook 配置。
+- `.claude/`：Claude Code 平台适配规则与 hook 片段。
+- `scripts/`、`.githooks/`：公开仓库的推送前私有信息检查。
 - `.agents/skills/`：Harness Skill 系列及其可执行检查。
 
 本仓库按照相对于用户主目录的路径镜像文件。运行时状态、会话、记忆、凭据、缓存和无关 Skill
