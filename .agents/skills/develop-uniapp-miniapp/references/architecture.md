@@ -35,8 +35,8 @@
 
 ## Placement Rules
 
-- Keep global UI hosts and app lifecycle work in `AppShell`, not in `PageLayout`.
-- Keep the shared global modal host in `AppShell`, backed by a shared UI store or modal store.
+- Keep app lifecycle work and global styles in `AppShell`; it renders no template in mini-programs, so it cannot host UI.
+- Mount the shared global modal host in `PageLayout`, backed by a shared UI store or modal store.
 - Put page-owned child UI in the owning route's `components/` directory before reaching for `src/components`.
 - Put route-owned orchestration in the owning route's `hooks/` directory before reaching for `src/hooks`.
 - Put route-local static display data or prototype content in route-local modules such as `data.ts` before reaching for `src/stores` or `src/api`.
@@ -73,7 +73,7 @@
 
 - Route entry handles lifecycle, route params, share hooks, and page-level orchestration.
 - Route entry should render through the shared `PageLayout` by default.
-- `AppShell` handles global lifecycle and global UI; `PageLayout` handles route-level structure.
+- `AppShell` handles global lifecycle and global styles; `PageLayout` handles route-level structure and hosts the shared global modal.
 - Complex child content can move into page-local subcomponents or page-local hooks first.
 - Prefer one level of page-local composition before creating a global abstraction.
 

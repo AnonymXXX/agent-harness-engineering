@@ -13,7 +13,7 @@ Use this file when a confirmed uni-app project needs stronger frontend foundatio
 
 Before adding pages at scale, check for:
 
-- app shell: `App.vue` lifecycle, global styles, modal/toast/loading hosts, scrollbar policy
+- app shell: `App.vue` lifecycle, global styles, scrollbar policy; the modal host lives in `PageLayout` because `App.vue`'s template is not rendered
 - page shell: `PageLayout` or equivalent navbar/content/bottom/overlay slots
 - bottom navigation: native tabbar, shared Vue tabbar, or official custom tabbar
 - scroll/list: native refresher, shared scroll wrapper, load-more observer, tab-scroll container
@@ -26,7 +26,7 @@ Add missing primitives only when the requested feature would otherwise duplicate
 
 ## Page Shell Pattern
 
-- Keep `App.vue` as app-level shell and global host.
+- Keep `App.vue` as the app-level shell for lifecycle and global styles; mount UI hosts in `PageLayout`.
 - Keep route layout in `PageLayout`: safe area, custom navbar, content slot, bottom slot, overlay slot.
 - Route pages should compose `PageLayout` and pass page-specific title, nav mode, background, and bottom-slot content.
 - A thin tab-page wrapper is valid when all tab pages share `PageLayout` plus one app tabbar.

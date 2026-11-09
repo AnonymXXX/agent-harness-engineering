@@ -48,9 +48,10 @@ An empty target (no files, or only `.git`, `.gitignore`, `.DS_Store`, editor met
 **Structure**
 - New Vue SFCs use `<script setup lang="ts">`.
 - Local-first: page-only UI goes in the route's `components/`, page-only orchestration in its `hooks/`, and static or prototype data in its `data.ts`. Promote code to `src/components` or `src/hooks` only when it is reused across routes and stays generic.
-- `App.vue` is the `AppShell` for app lifecycle, global styles, and global UI hosts. It must keep a non-empty `<script>` or `<template>` block.
+- `App.vue` is the `AppShell` for app lifecycle and global styles. Mini-programs never render its template, so it hosts no UI; keep its `<script>` block non-empty.
 - New route pages use the shared `PageLayout`, or the repo's existing shell when that already fills the role.
-- Keep at most one global modal capability. Reuse the existing one; add `AppModal` + `modalStore` + `useAppModal` only when the requested work needs app-wide prompts.
+- Keep at most one global modal capability. Reuse the existing one; add `AppModal` + `modalStore` + `useAppModal` only when the requested work needs app-wide prompts, and mount `<AppModal />` at the end of `PageLayout`'s root node, never in `App.vue`.
+- Register Tailwind in `vite.config.ts` `css.postcss.plugins`; uni overrides `css.postcss`, so a `postcss.config.js` is silently ignored.
 - Keep startup pages, `tabBar` pages, and package-shared resources in the main package.
 - Custom events are declared in camelCase in script (`emit('quickAction')`) and listened to with hyphens in templates (`@quick-action`).
 

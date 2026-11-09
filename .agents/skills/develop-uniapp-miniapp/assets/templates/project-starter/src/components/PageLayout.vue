@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useSlots } from 'vue'
+import AppModal from './AppModal.vue'
 
 interface Props {
   title?: string
@@ -94,5 +95,8 @@ function handleClickLeft() {
     </view>
 
     <slot name="overlay" />
+
+    <!-- Mini-programs never render App.vue's template: every page mounts its own AppModal, sharing the modal store. -->
+    <AppModal />
   </view>
 </template>

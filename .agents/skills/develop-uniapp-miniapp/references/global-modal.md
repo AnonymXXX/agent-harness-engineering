@@ -8,9 +8,10 @@
 
 ## Ownership
 
-- Mount the global modal host in `App.vue` or the repo's existing `AppShell`.
-- Keep required global modal hosts out of `PageLayout` in new code.
-- If an existing repo already mounts a stable global modal in `PageLayout`, do not migrate it unless the user asks; avoid adding a second host.
+- Mount the global modal host at the end of `PageLayout`'s root node; each page renders its own instance, and all instances share `modalStore`.
+- Never mount it in `App.vue`: mini-programs (and H5) do not render `App.vue`'s template, so the modal never appears and the `showModal()` promise never settles.
+- If an existing repo mounts the modal in `App.vue`, it is broken; move it into the page shell when touching modal work.
+- If an existing repo already mounts a working modal in its page shell, reuse it; avoid adding a second host.
 
 ## Interface
 

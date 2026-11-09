@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onLaunch, onShow } from '@dcloudio/uni-app'
-import AppModal from './components/AppModal.vue'
 
+// App.vue renders no template in mini-programs (or H5): the global modal lives in PageLayout.
 onLaunch(() => {
   console.log('App Launch')
 })
@@ -10,10 +10,6 @@ onShow(() => {
   console.log('App Show')
 })
 </script>
-
-<template>
-  <AppModal />
-</template>
 
 <style lang="scss">
 @tailwind base;

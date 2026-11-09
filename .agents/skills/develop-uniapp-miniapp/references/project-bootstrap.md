@@ -33,7 +33,6 @@ The starter should include:
 - `pnpm-lock.yaml` after installation
 - `vite.config.ts`
 - `tsconfig.json`
-- `postcss.config.js`
 - `tailwind.config.ts`
 - Tailwind/Iconify icon support with a generic starter icon collection
 - `eslint.config.mjs`
@@ -54,12 +53,12 @@ The starter should include:
 
 - Keep the starter minimal and runnable.
 - Keep the starter Tailwind-first.
+- Register Tailwind in `vite.config.ts` under `css.postcss.plugins` (`tailwindcss()`, `autoprefixer()`), not in a `postcss.config.js`: `@dcloudio/vite-plugin-uni` writes its own `css.postcss`, so Vite never reads the config file and `app.wxss` keeps the raw `@tailwind` directives.
 - Keep the starter icon/font setup generic and centralized.
 - In starter `tsconfig.json`, prefer `paths` aliases without `compilerOptions.baseUrl`.
 - Use `Composition API` with `<script setup lang="ts">` in starter Vue SFCs that need script logic.
-- Keep `App.vue` focused on `AppShell` responsibilities such as app lifecycle, global styles, and global UI hosts.
-- Include a shared style-neutral global modal host in starter `App.vue`.
-- Keep route layout concerns in the shared `PageLayout`.
+- Keep `App.vue` to lifecycle script and global styles; its template is not rendered in mini-programs.
+- Keep route layout concerns in the shared `PageLayout`, and mount the shared style-neutral global modal host at the end of its root node.
 - When starter routes grow beyond a single file, put page-local child UI in the route's `components/` directory and page-local orchestration in the route's `hooks/` directory.
 - Keep the starter on a single main package by default; do not scaffold `subPackages` until the user asks for a larger route architecture or a new feature clearly warrants package separation.
 - Keep all new visible text at `20rpx` or above.

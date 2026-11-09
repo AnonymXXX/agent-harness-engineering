@@ -3,16 +3,16 @@
 ## Default Layering
 
 - Treat `App.vue` as the default `AppShell` layer in uni-app projects.
-- Keep app launch, foreground/background handling, global styles, and global UI hosts in `AppShell`.
-- Keep route-level layout in a shared generic `PageLayout`.
+- Keep app launch, foreground/background handling, and global styles in `AppShell`.
+- Keep route-level layout, plus the shared global modal host, in a shared generic `PageLayout`.
+- `App.vue`'s template is never rendered in mini-programs (or H5), so any component mounted there never appears.
 
 ## AppShell Responsibilities
 
 - App lifecycle such as launch, show, hide, reconnect, and bootstrapping.
 - Global styles, font registration, and app-wide environment setup.
 - App-wide scrollbar policy for mini-program `scroll-view` surfaces, such as global `scroll-view::-webkit-scrollbar` suppression when the project hides scrollbars by default.
-- App-wide UI hosts such as toast, loading, modal, or other global overlays.
-- By default, keep one shared global modal host in `AppShell`.
+- Do not mount UI hosts here; use `uni.showToast` / `uni.showLoading` for native feedback and mount the shared modal host in `PageLayout`.
 - Shared app-level stores or services should connect here, not inside every route page.
 
 ## PageLayout Responsibilities
@@ -22,6 +22,7 @@
 - Main content slot.
 - Bottom slot for tabbar or page-level bottom actions.
 - Overlay slot for page-local floating layers.
+- The shared global modal host (`<AppModal />`), mounted once at the end of the root node; every page gets its own instance, all bound to the same modal store.
 
 ## PageLayout Interface
 
@@ -46,7 +47,7 @@
 
 ## What Not To Put In PageLayout
 
-- Global `Toast`, `Loading`, or `Modal` hosts.
+- A second modal host, or extra global `Toast` / `Loading` hosts; the single `AppModal` at the end of the root node is the only global host here.
 - Business-specific tabbar implementations.
 - Business risk-control overlays or brand-only UI layers.
 - Page-local scrollbar pseudo-element hacks when `AppShell` already owns the global scrollbar policy.
@@ -62,14 +63,15 @@
 
 ## Global Modal Integration
 
-- Mount the shared global modal host in `AppShell`.
+- Mount the shared global modal host at the end of `PageLayout`'s root node, never in `App.vue`.
 - Keep route pages on the shared modal hook or wrapper instead of mounting duplicate global hosts.
+- A route that renders without `PageLayout` cannot show the shared modal; route it through `PageLayout` or mount `<AppModal />` in that page.
 - A page-local modal component is still valid when the body is feature-specific and not suitable for the shared global modal surface.
 
 ## App.vue Shape
 
-- Keep `App.vue` minimal, but always keep a non-empty `<script>` or `<template>` block; uni-app Vite builds reject a style-only SFC.
-- Mount global UI hosts such as the shared modal in `App.vue`; keep `PageLayout` free of required global hosts in new code.
+- Keep `App.vue` to lifecycle script plus global styles, and keep the `<script>` block non-empty; uni-app Vite builds reject a style-only SFC.
+- Do not put a `<template>` with UI hosts in `App.vue`: it is not rendered in mini-programs, so a modal mounted there never shows and `useAppModal().showModal()` never resolves.
 
 ## Existing Code Boundary
 

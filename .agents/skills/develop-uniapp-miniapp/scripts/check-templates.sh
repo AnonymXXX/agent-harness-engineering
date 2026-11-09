@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Smoke-check the bundled templates: scaffold project-starter into a temp dir,
-# drop the standalone templates into src/_tpl, then install, build, type-check and lint.
+# drop the standalone templates into src/_tpl, then install, build, verify Tailwind output,
+# type-check and lint.
 # Usage: scripts/check-templates.sh [--keep]
 
 set -euo pipefail
@@ -23,6 +24,14 @@ echo "==> install ($work_dir)"
 pnpm install --reporter=silent
 echo "==> build:mp-weixin"
 pnpm -s build:mp-weixin
+echo "==> tailwind output"
+# A green build is not enough: if Tailwind is not wired into Vite's css.postcss,
+# app.wxss ships the raw @tailwind directives and no utilities.
+wxss="dist/build/mp-weixin/app.wxss"
+if grep -q '@tailwind' "$wxss" || ! grep -qF '.flex{display:flex}' "$wxss"; then
+  echo "Tailwind utilities missing from $wxss (raw @tailwind left or .flex{display:flex} absent)." >&2
+  exit 1
+fi
 echo "==> type-check"
 pnpm -s type-check
 echo "==> lint"

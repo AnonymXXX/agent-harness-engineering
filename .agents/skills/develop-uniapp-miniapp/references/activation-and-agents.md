@@ -14,7 +14,7 @@ Adapt this template to confirmed project conventions; do not copy defaults that 
 Use $develop-uniapp-miniapp by default for new uni-app mini-program work in this repository.
 
 - Use `Composition API` with `<script setup lang="ts">` for newly added Vue SFCs.
-- Use the shared `PageLayout` for all newly added route pages and keep app-level lifecycle or global UI concerns in `App.vue`.
+- Use the shared `PageLayout` for all newly added route pages and keep app-level lifecycle and global styles in `App.vue`; the shared modal host lives in `PageLayout`.
 - Keep startup pages and `tabBar` pages in the main package; reuse the existing subpackage structure for low-frequency feature routes.
 - Default to local-first decomposition: page-only child components belong in that route's `components/`, page-only orchestration belongs in that route's `hooks/`, and only cross-route generic code should move to shared layers.
 - Reuse existing request, session, upload, feedback, scroll, realtime, and subscription wrappers before adding new ones.
