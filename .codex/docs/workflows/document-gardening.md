@@ -22,7 +22,7 @@ The deep audit reports:
 - an `AGENTS.md` over 120 lines, which is a prompt to move detailed procedures into linked workflow documents;
 - an execution plan under `docs/exec-plans/` that still has an unchecked item more than 30 days after its last commit;
 - missing or incomplete Verification metadata in `docs/engineering-rules/`;
-- line counts for `~/.codex/memories/memory_summary.md` and `MEMORY.md`, with warnings above 300 and 1000 lines respectively.
+- the line count of `~/.codex/memories/memory_summary.md`, with a warning above 300 lines. The Codex-managed full store `MEMORY.md` is not size-checked.
 
 Warnings are maintenance prompts, not authorization to change project state. Doctor never edits documentation or memory.
 

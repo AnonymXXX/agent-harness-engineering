@@ -671,6 +671,33 @@ class WorktreeTests(unittest.TestCase):
         self.assertFalse([item for item in checks if item["severity"] == "error"])
         self.assertTrue(any(item["code"] == "orphan-branch-retained" for item in checks))
 
+    def test_cleanup_keeps_worktree_branch_that_is_ahead_of_its_upstream(self) -> None:
+        remote = self.root / "remote.git"
+        run("git", "init", "--bare", str(remote), cwd=self.root)
+        run("git", "remote", "add", "origin", str(remote), cwd=self.repo)
+        run("git", "push", "origin", "main:claude/old-upstream", cwd=self.repo)
+        (self.repo / "main.txt").write_text("main\n", encoding="utf-8")
+        run("git", "add", "main.txt", cwd=self.repo)
+        run("git", "commit", "-m", "advance main", cwd=self.repo)
+        worktree = self.add_worktree("tracked-worktree", "claude/tracked-worktree")
+        run("git", "fetch", "origin", cwd=self.repo)
+        run("git", "branch", "-u", "origin/claude/old-upstream", "claude/tracked-worktree", cwd=self.repo)
+
+        records, checks = doctor.cleanup_worktrees(
+            [self.root / "projects"],
+            older_than_days=7,
+            dry_run=False,
+            now=datetime.now().astimezone() + timedelta(days=8),
+            active_cwds=set(),
+        )
+
+        record = next(item for item in records if item["branch"] == "claude/tracked-worktree" and item["path"])
+        self.assertEqual("worktree-removed-branch-retained", record["cleanup_status"])
+        self.assertFalse(worktree.exists())
+        self.assertIn("claude/tracked-worktree", run("git", "branch", "--format=%(refname:short)", cwd=self.repo).splitlines())
+        self.assertFalse([item for item in checks if item["severity"] == "error"])
+        self.assertTrue(any(item["code"] == "worktree-branch-retained" for item in checks))
+
     def test_cleanup_if_due_skips_recent_success(self) -> None:
         state_file = self.root / "state" / "cleanup.json"
         argv = ["cleanup", "--safe", "--if-due", "--state-file", str(state_file), "--repo-root", str(self.repo)]
@@ -798,8 +825,8 @@ class DocumentTests(unittest.TestCase):
         audit, checks = doctor.scan_documents([self.repo], memory_root=memory)
 
         self.assertEqual(301, audit["memory"]["memory_summary.md"]["lines"])
-        self.assertEqual(1001, audit["memory"]["MEMORY.md"]["lines"])
-        self.assertEqual(2, len([item for item in checks if item["code"] == "docs-memory-large"]))
+        self.assertNotIn("MEMORY.md", audit["memory"])
+        self.assertEqual(1, len([item for item in checks if item["code"] == "docs-memory-large"]))
         self.assertEqual("line\n" * 301, summary.read_text(encoding="utf-8"))
 
     def test_explicit_linked_worktree_scans_that_worktree(self) -> None:

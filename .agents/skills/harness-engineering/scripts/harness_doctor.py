@@ -82,7 +82,8 @@ VERIFICATION_FIELD_PATTERN = re.compile(
     r"^\s*[-*+]\s+(Mode|Command|Reason):\s*(.*?)\s*$",
     re.MULTILINE | re.IGNORECASE,
 )
-MEMORY_LINE_LIMITS = {"memory_summary.md": 300, "MEMORY.md": 1000}
+# Only the summary is injected into sessions; MEMORY.md is the Codex-managed full store and is not size-checked.
+MEMORY_LINE_LIMITS = {"memory_summary.md": 300}
 
 
 def check(
@@ -1153,12 +1154,13 @@ def cleanup_worktrees(
                     if delete_branch.returncode == 0:
                         status = "removed"
                     else:
+                        # A refused `git branch -d` (for example an unmerged upstream) means keep the branch.
                         status = "worktree-removed-branch-retained"
                         checks.append(
                             check(
-                                "error",
-                                "worktree-branch-delete-failed",
-                                f"Removed worktree but retained branch {branch}: {delete_branch.stderr.strip()}",
+                                "warning",
+                                "worktree-branch-retained",
+                                f"Removed worktree but kept branch {branch} because git refused a safe delete: {delete_branch.stderr.strip()}",
                                 section="worktrees",
                                 **record,
                             )
