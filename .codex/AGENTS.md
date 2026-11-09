@@ -69,7 +69,8 @@ For UI, frontend, styling, or visual-design work, read project-root `DESIGN.md` 
 
 ## Implementation And Risk
 
-- Choose the simplest complete implementation. Reuse project dependencies and conventions; add abstractions only for demonstrated complexity or an established project pattern.
+- Choose the simplest complete implementation. Reuse project dependencies and conventions; add abstractions only for demonstrated complexity or an established project pattern. Do not add runtime fallbacks, polling backups, retries, or default-rule branches the user did not ask for; when one seems necessary, propose it instead of building it.
+- Recurring automations and heartbeats: after three consecutive runs blocked by the same cause, pause the automation and notify the user once instead of repeating the report.
 - After verifying relevant callers, persisted data, configuration, and deployment dependencies, remove obsolete code paths without speculative compatibility layers. If evidence is incomplete, verify the dependencies first. A bounded interim solution must state its risk and removal condition.
 - Classify risk before editing. Use the `harness-engineering` skill's Fast Lane for small isolated work; read [Harness Engineering](docs/workflows/harness-engineering.md) for broader work and [Git Worktree Workflow](docs/workflows/git-worktree.md) for medium/large Git changes. File count is a signal, not a threshold.
 - Prefer the main working directory for all risk lanes. Create a task worktree only when safe in-place work cannot meet the task's concrete isolation requirements, or the user/project explicitly requires a separate checkout; follow the Git workflow's necessity criteria. Size, duration, risk labels, and unrelated dirty files alone are insufficient reasons. Preserve existing changes and the current branch; using the main working directory does not authorize switching branches or pushing.

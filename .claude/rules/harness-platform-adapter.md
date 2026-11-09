@@ -2,10 +2,13 @@
 
 The shared `~/.claude/CLAUDE.md` links to `~/.codex/AGENTS.md` and remains the behavioral source of truth. Apply it in Claude Code with these platform mappings:
 
+**Language (hard rule):** when the user writes in Chinese, every visible sentence is Chinese, including one-line progress notes between tool calls, background-job narration, and replies after context compaction. Commands, paths, code symbols, and quoted errors stay unchanged.
+
 - Relative `docs/workflows/...` links in `~/.claude/CLAUDE.md` resolve under `~/.codex/`, for example `~/.codex/docs/workflows/git-worktree.md`.
 - `request_user_input` maps to `AskUserQuestion`.
 - Subagents follow the global Subagent Delegation rule and use the `Agent` tool directly; no Worker protocol, dispatch contract, or delegation quota applies.
-- Name task branches `claude/<task-slug>`, never `codex/<task-slug>`; periodic Harness cleanup recognizes the `claude/` prefix. Do not use a subagent's `isolation: worktree` or `EnterWorktree` default naming as a substitute for the Git Worktree Workflow.
+- Name task branches `claude/<task-slug>`, never `codex/<task-slug>`; periodic Harness cleanup recognizes the `claude/` prefix. `EnterWorktree` creates `claude/<name>` worktrees under `<repo>/.claude/worktrees/`; use it when the runtime requires isolation (for example a background job), and cleanup handles that location. Otherwise the Git Worktree Workflow's necessity criteria decide. Before calling `EnterWorktree`, run `git rev-parse --show-toplevel`: keep working if the session is already in the intended task worktree, and `cd` into the target repository first if it is outside any Git repository.
+- Waiting: run deploys, uploads, builds, SSH sessions, and anything expected to take more than about a minute with `run_in_background`, and wait for a condition with `Monitor`. Never wait with a foreground `sleep` or a `for … seq` polling loop.
 
 ## Browser
 
