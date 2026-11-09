@@ -610,6 +610,83 @@ class WorktreeTests(unittest.TestCase):
         listing = run("git", "worktree", "list", "--porcelain", cwd=self.repo)
         self.assertIn(os.path.realpath(missing), listing)
 
+    def test_cleanup_deletes_only_old_merged_orphan_agent_branches(self) -> None:
+        run("git", "branch", "claude/merged-orphan", cwd=self.repo)
+        run("git", "branch", "codex/ledgered-orphan", cwd=self.repo)
+        run("git", "branch", "manual/merged-orphan", cwd=self.repo)
+        unmerged = self.add_worktree("unmerged-orphan", "claude/unmerged-orphan")
+        (unmerged / "feature.txt").write_text("feature\n", encoding="utf-8")
+        run("git", "add", "feature.txt", cwd=unmerged)
+        run("git", "commit", "-m", "feature", cwd=unmerged)
+        run("git", "worktree", "remove", str(unmerged), cwd=self.repo)
+        ledger = self.repo / "docs" / "exec-plans" / "worktree-ledger.md"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text("Keep codex/ledgered-orphan\n", encoding="utf-8")
+
+        records, checks = doctor.cleanup_worktrees(
+            [self.root / "projects"],
+            older_than_days=7,
+            dry_run=False,
+            now=datetime.now().astimezone() + timedelta(days=8),
+            active_cwds=set(),
+        )
+
+        status_by_branch = {item["branch"]: item["cleanup_status"] for item in records if not item["path"]}
+        self.assertEqual("branch-deleted", status_by_branch["claude/merged-orphan"])
+        self.assertEqual("ledger-covered", status_by_branch["codex/ledgered-orphan"])
+        self.assertEqual("unmerged-branch", status_by_branch["claude/unmerged-orphan"])
+        self.assertNotIn("manual/merged-orphan", status_by_branch)
+        branches = run("git", "branch", "--format=%(refname:short)", cwd=self.repo).splitlines()
+        self.assertNotIn("claude/merged-orphan", branches)
+        for kept in ("codex/ledgered-orphan", "claude/unmerged-orphan", "manual/merged-orphan"):
+            self.assertIn(kept, branches)
+        self.assertFalse([item for item in checks if item["severity"] == "error"])
+
+    def test_cleanup_keeps_orphan_branch_that_is_ahead_of_its_upstream(self) -> None:
+        remote = self.root / "remote.git"
+        run("git", "init", "--bare", str(remote), cwd=self.root)
+        run("git", "remote", "add", "origin", str(remote), cwd=self.repo)
+        run("git", "push", "origin", "main:claude/tracked", cwd=self.repo)
+        (self.repo / "main.txt").write_text("main\n", encoding="utf-8")
+        run("git", "add", "main.txt", cwd=self.repo)
+        run("git", "commit", "-m", "advance main", cwd=self.repo)
+        run("git", "branch", "claude/tracked", "main", cwd=self.repo)
+        run("git", "fetch", "origin", cwd=self.repo)
+        run("git", "branch", "-u", "origin/claude/tracked", "claude/tracked", cwd=self.repo)
+
+        records, checks = doctor.cleanup_worktrees(
+            [self.root / "projects"],
+            older_than_days=7,
+            dry_run=False,
+            now=datetime.now().astimezone() + timedelta(days=8),
+            active_cwds=set(),
+        )
+
+        record = next(item for item in records if item["branch"] == "claude/tracked")
+        self.assertEqual("branch-retained", record["cleanup_status"])
+        self.assertIn("claude/tracked", run("git", "branch", "--format=%(refname:short)", cwd=self.repo).splitlines())
+        self.assertFalse([item for item in checks if item["severity"] == "error"])
+        self.assertTrue(any(item["code"] == "orphan-branch-retained" for item in checks))
+
+    def test_cleanup_if_due_skips_recent_success(self) -> None:
+        state_file = self.root / "state" / "cleanup.json"
+        argv = ["cleanup", "--safe", "--if-due", "--state-file", str(state_file), "--repo-root", str(self.repo)]
+
+        first = io.StringIO()
+        with contextlib.redirect_stdout(first):
+            self.assertEqual(0, doctor.main(argv))
+        self.assertIn(str(self.repo.resolve()), json.loads(state_file.read_text(encoding="utf-8")))
+
+        second = io.StringIO()
+        with contextlib.redirect_stdout(second):
+            self.assertEqual(0, doctor.main(argv))
+        self.assertIn("not due", second.getvalue())
+
+        dry_state = self.root / "state" / "dry.json"
+        with contextlib.redirect_stdout(io.StringIO()):
+            doctor.main(["cleanup", "--safe", "--dry-run", "--state-file", str(dry_state), "--repo-root", str(self.repo)])
+        self.assertFalse(dry_state.exists())
+
 
 class DocumentTests(unittest.TestCase):
     def setUp(self) -> None:

@@ -45,6 +45,8 @@ HARNESS_INVOCATION_POLICY = {
 }
 # Task branch prefixes per agent: Codex, Claude Code, pi.
 AGENT_BRANCH_PREFIXES = ("codex/", "claude/", "pi/")
+# Records when `cleanup` last succeeded per repository, so `--if-due` can skip recent runs.
+CLEANUP_STATE_FILE = Path.home() / ".agents" / "state" / "harness-cleanup.json"
 WORKTREE_DEBT_STATES = {
     "dirty",
     "clean-unmerged-or-rewritten",
@@ -475,7 +477,7 @@ def _ledger_candidates(repo: Path) -> list[Path]:
 
 
 def _ledger_coverage(repo: Path, path: str, branch: str | None) -> tuple[bool, str | None]:
-    aliases = {path, os.path.realpath(path)}
+    aliases = {path, os.path.realpath(path)} if path else set()
     aliases.update(
         item.removeprefix("/private")
         for item in tuple(aliases)
@@ -1164,7 +1166,132 @@ def cleanup_worktrees(
             record["cleanup_status"] = status
             records.append(record)
 
-    return sorted(records, key=lambda item: (item["repo"], item["path"])), checks
+        branch_records, branch_checks = _cleanup_orphan_branches(
+            repo,
+            worktrees,
+            integration_branch,
+            older_than_days=older_than_days,
+            dry_run=dry_run,
+            now=now,
+        )
+        records.extend(branch_records)
+        checks.extend(branch_checks)
+
+    return sorted(records, key=lambda item: (item["repo"], item["path"], item["branch"] or "")), checks
+
+
+def _cleanup_orphan_branches(
+    repo: Path,
+    worktrees: Sequence[dict[str, Any]],
+    integration_branch: str,
+    *,
+    older_than_days: int,
+    dry_run: bool,
+    now: datetime,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Delete old agent branches that no worktree uses and the integration branch already contains."""
+    records: list[dict[str, Any]] = []
+    checks: list[dict[str, Any]] = []
+    checked_out = {item["branch"] for item in worktrees if item.get("branch")}
+    listing = _run_git(
+        repo,
+        "for-each-ref",
+        "--format=%(refname)%09%(committerdate:iso-strict)",
+        *(f"refs/heads/{prefix.rstrip('/')}" for prefix in AGENT_BRANCH_PREFIXES),
+        check_result=False,
+    )
+    if listing.returncode != 0:
+        checks.append(
+            check(
+                "error",
+                "branch-list-failed",
+                f"Cannot list agent branches for {repo}: {listing.stderr.strip()}",
+                section="worktrees",
+                repo=str(repo),
+            )
+        )
+        return records, checks
+
+    for line in listing.stdout.splitlines():
+        ref, _, committed = line.partition("\t")
+        if not ref or ref in checked_out:
+            continue
+        branch = ref.removeprefix("refs/heads/")
+        try:
+            tip_time = datetime.fromisoformat(committed)
+        except ValueError:
+            tip_time = None
+        age_days = (now - tip_time).total_seconds() / 86400 if tip_time else None
+        merged = _run_git(
+            repo, "merge-base", "--is-ancestor", ref, integration_branch, check_result=False
+        ).returncode == 0
+        covered, ledger_path = _ledger_coverage(repo, "", ref)
+        record = {
+            "repo": str(repo),
+            "path": "",
+            "branch": branch,
+            "state": "merged-branch" if merged else "unmerged-branch",
+            "ledger_covered": covered,
+            "ledger_path": ledger_path,
+            "locked": False,
+            "last_activity_at": tip_time.isoformat() if tip_time else None,
+            "age_days": round(age_days, 3) if age_days is not None else None,
+            "lifecycle": "orphan-branch",
+        }
+        if not merged:
+            status = "unmerged-branch"
+        elif covered:
+            status = "ledger-covered"
+        elif age_days is None:
+            status = "unknown-age"
+        elif age_days <= older_than_days:
+            status = "too-recent"
+        elif dry_run:
+            status = "would-delete-branch"
+        else:
+            delete_branch = _run_git(repo, "branch", "-d", "--", branch, check_result=False)
+            if delete_branch.returncode == 0:
+                status = "branch-deleted"
+            else:
+                # `git branch -d` refuses when, for example, the upstream branch has unmerged commits;
+                # that refusal is a reason to keep the branch, not a cleanup failure.
+                status = "branch-retained"
+                checks.append(
+                    check(
+                        "warning",
+                        "orphan-branch-retained",
+                        f"Kept branch {branch} because git refused a safe delete: {delete_branch.stderr.strip()}",
+                        section="worktrees",
+                        **record,
+                    )
+                )
+        record["cleanup_status"] = status
+        records.append(record)
+    return records, checks
+
+
+def _read_cleanup_state(path: Path) -> dict[str, str]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _cleanup_due(state: dict[str, str], root: Path, now: datetime, interval_hours: int) -> bool:
+    try:
+        last = datetime.fromisoformat(state[str(root)])
+    except (KeyError, TypeError, ValueError):
+        return True
+    return now - last >= timedelta(hours=interval_hours)
+
+
+def _record_cleanup_success(path: Path, roots: Sequence[Path], now: datetime) -> None:
+    state = _read_cleanup_state(path)
+    for root in roots:
+        state[str(root)] = now.isoformat()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _harness_checks(home: Path, skills: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1478,7 +1605,15 @@ def _index_command(args: argparse.Namespace) -> int:
 
 def _cleanup_command(args: argparse.Namespace) -> int:
     home = Path.home()
-    roots = args.repo_root or _default_repo_roots(home)
+    now = datetime.now().astimezone()
+    roots = [root.expanduser().resolve() for root in (args.repo_root or _default_repo_roots(home))]
+    if args.if_due:
+        state = _read_cleanup_state(args.state_file)
+        due = [root for root in roots if _cleanup_due(state, root, now, args.interval_hours)]
+        if not due:
+            print(f"Harness cleanup not due: last success within {args.interval_hours}h for {len(roots)} root(s)")
+            return 0
+        roots = due
     records, checks = cleanup_worktrees(
         roots,
         older_than_days=args.older_than_days,
@@ -1503,6 +1638,8 @@ def _cleanup_command(args: argparse.Namespace) -> int:
         "checks": checks,
         "worktrees": records,
     }
+    if not args.dry_run and not report["summary"]["errors"] and roots:
+        _record_cleanup_success(args.state_file, roots, now)
     if args.format == "json":
         sys.stdout.write(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     else:
@@ -1572,6 +1709,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cleanup_parser.add_argument("--older-than-days", type=int, default=7)
     cleanup_parser.add_argument("--dry-run", action="store_true")
+    cleanup_parser.add_argument(
+        "--if-due",
+        action="store_true",
+        help="Skip roots whose last successful cleanup is newer than --interval-hours",
+    )
+    cleanup_parser.add_argument("--interval-hours", type=int, default=24)
+    cleanup_parser.add_argument("--state-file", type=Path, default=CLEANUP_STATE_FILE)
     cleanup_parser.add_argument("--format", choices=("human", "json"), default="human")
     cleanup_parser.add_argument(
         "--repo-root",

@@ -100,9 +100,9 @@ Verify `git merge-base --is-ancestor <task-commit> <local-target>` after integra
 
 ## Periodic Stale Cleanup
 
-Do not run the global cleanup scan for Fast Lane work. For Standard or Heavy Lane completion, run `uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py cleanup --safe --older-than-days 7` only when no successful global cleanup is known within the preceding 24 hours. When uncertain, skip it and leave cleanup to the next periodic Harness maintenance pass.
+Do not run the global cleanup scan for Fast Lane work. For Standard or Heavy Lane completion, run `uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py cleanup --safe --older-than-days 7 --if-due`. It records each successful run per repository in `~/.agents/state/harness-cleanup.json` and skips repositories cleaned within the last 24 hours, so the agent never needs to remember when cleanup last ran.
 
-Cleanup automatically removes only stale agent task worktrees (`codex/*`, `claude/*`, `pi/*`) that are clean, fully merged into their integration branch, unlocked, not ledgered, and unused as any process cwd. Age is the newest of directory creation time, directory modification time, and branch commit time. Dirty, unmerged, detached, other-prefix, unknown, active, locked, and ledgered worktrees are retained. Cleanup failure is reported and leaves uncertain worktrees untouched; it does not retroactively invalidate completed implementation work.
+Cleanup automatically removes only stale agent task worktrees (`codex/*`, `claude/*`, `pi/*`) that are clean, fully merged into their integration branch, unlocked, not ledgered, and unused as any process cwd. Age is the newest of directory creation time, directory modification time, and branch commit time. Dirty, unmerged, detached, other-prefix, unknown, active, locked, and ledgered worktrees are retained. It also deletes, with `git branch -d`, old agent branches that no worktree uses, that the integration branch already contains, and that no ledger mentions. Cleanup failure is reported and leaves uncertain worktrees untouched; it does not retroactively invalidate completed implementation work.
 
 ## Commit Convergence Before Publication
 
