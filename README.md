@@ -76,7 +76,7 @@ Codex 只能分析当前任务中你明确授权且本机可访问的内容。�
 ## 安装
 
 本机已经安装时直接使用。换机或重装时，在 macOS 上安装 Codex CLI、Git、`uv`、GitHub CLI，
-然后手动创建 Harness 符号链接。浏览器使用 Codex 的 Browser/Chrome 插件或 Claude 的内置浏览器与 Claude in Chrome，无需另装浏览器：
+然后手动创建 Harness 符号链接。浏览器默认使用 `magpie-browser` MCP（需安装 magpie 并在 Codex、Claude 中注册），不可用时才回退到 Codex 的 Browser/Chrome 插件或 Claude 的内置浏览器与 Claude in Chrome：
 
 ```bash
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering

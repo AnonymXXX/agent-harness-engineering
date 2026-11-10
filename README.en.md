@@ -84,7 +84,7 @@ other devices; Codex should not infer conclusions from missing information.
 
 If this machine is already installed, use it directly. To set up a new machine, first install Codex
 CLI, Git, `uv`, and GitHub CLI on macOS, then create the Harness symlinks manually.
-Browser work uses Codex's Browser/Chrome plugins or Claude's built-in browser and Claude in Chrome, so no separate browser install is needed:
+Browser work defaults to the `magpie-browser` MCP (install magpie and register it in Codex and Claude); Codex's Browser/Chrome plugins or Claude's built-in browser and Claude in Chrome are fallbacks only:
 
 ```bash
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering

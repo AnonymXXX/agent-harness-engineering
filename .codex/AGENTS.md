@@ -39,7 +39,7 @@ Keep user-managed skills under `~/.agents/skills`; reserve `~/.codex/skills` for
 
 涉及云资源、DNS/子域名解析、代码托管、部署和其他可通过结构化接口完成的操作时，先加载适用 Skill，并按专用 MCP/官方 API → 官方 CLI → 浏览器的顺序选择执行路径；只有前述路径不可用、能力不足，或任务本身需要登录态页面、可视化核验或网页交互时，才使用浏览器。认证、权限或审批拒绝不得通过更换身份或浏览器绕过。
 
-使用当前平台自带的浏览器能力（Claude Code 见 `~/.claude/rules/harness-platform-adapter.md`），不使用 `ego-browser`（ego lite），也不用 AppleScript 或 shell 脚本替代浏览器扩展。不抢占用户操作：只在 Agent 自己新建的标签页中工作，不接管、导航或关闭用户原有标签页。开始浏览器操作前读 [Browser Workflow](docs/workflows/browser.md)，它负责平台选择、登录墙切换、元素优先操作、节省 token 和 JumpServer 终端用法。
+默认使用 `magpie-browser` MCP，仅在其不可用或能力不足时回退到平台自带浏览器（Claude Code 见 `~/.claude/rules/harness-platform-adapter.md`）；不使用 `ego-browser`（ego lite），也不用 AppleScript 或 shell 脚本替代浏览器扩展。不抢占用户操作：只在 Agent 自己新建的标签页中工作，不接管、导航或关闭用户原有标签页。开始浏览器操作前读 [Browser Workflow](docs/workflows/browser.md)，它负责平台选择、登录墙切换、元素优先操作、节省 token 和 JumpServer 终端用法。
 
 ## Browser Acceptance
 
@@ -47,7 +47,7 @@ Post-implementation browser acceptance requires an explicit user request or a hi
 
 ## Human Verification（验证码/人机验证）
 
-在浏览器或网页操作中检测到人机验证（CAPTCHA、滑块验证、点选验证码、reCAPTCHA、登录风控等）时，**立即停止该页面的自动化操作**，保留该页面（Codex 浏览器插件中对该标签页调用 `tab.markHandoff()`）交给用户并等待。禁止调用视觉能力尝试自动通过，也不得继续点击、拖拽、刷新或绕过验证。
+在浏览器或网页操作中检测到人机验证（CAPTCHA、滑块验证、点选验证码、reCAPTCHA、登录风控等）时，**立即停止该页面的自动化操作**，保留该页面（`magpie-browser` 中保持该标签页打开、不再操作；回退到 Codex 浏览器插件时对该标签页调用 `tab.markHandoff()`）交给用户并等待。禁止调用视觉能力尝试自动通过，也不得继续点击、拖拽、刷新或绕过验证。
 
 使用当前运行时可用的用户输入机制说明验证码位置（页面/网址/当前步骤）并等待；优先使用运行时允许且能表达所需输入的结构化工具，否则直接询问。选项至少包含 `已验证`（继续）、`未处理`（跳过或结束当前步骤）和 `取消任务`（终止任务）。
 
