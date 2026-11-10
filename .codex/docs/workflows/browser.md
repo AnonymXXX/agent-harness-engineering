@@ -8,7 +8,7 @@ The global [Browser And Web Access](../../AGENTS.md#browser-and-web-access) rule
 
 ## 平台选择
 
-需要浏览器的联网调研、网页读取、登录态操作和本地页面验证，默认使用 `magpie-browser` MCP（Claude 中工具名为 `mcp__magpie-browser__browser`，Codex 中为 MCP 服务器 `magpie-browser`），不使用平台内置浏览器（Codex Browser 插件/应用内浏览器、Claude 内置浏览器面板 `mcp__Claude_Browser__*`）。它在用户自己的浏览器里打开独立标签页，天然带登录态。
+需要浏览器的联网调研、网页读取、登录态操作和本地页面验证，默认使用 `magpie-browser` MCP（工具名含 `magpie-browser` 的 `browser` 工具，前缀随宿主不同，如 `mcp__magpie-browser__browser` 或 `mcp__magpie__mcp__magpie-browser__browser`，按名字里的 `magpie-browser` 识别，不要因前缀不同就判定未连接；Codex 中为 MCP 服务器 `magpie-browser`），不使用平台内置浏览器（Codex Browser 插件/应用内浏览器、Claude 内置浏览器面板 `mcp__Claude_Browser__*`）。它在用户自己的浏览器里打开独立标签页，天然带登录态。
 
 - `magpie-browser` 未连接、报错或缺少任务所需能力时，才回退到平台自带浏览器：Codex 用 Browser 插件，Chrome 登录态需求用 Chrome 插件；Claude Code 按 `~/.claude/rules/harness-platform-adapter.md` 使用内置浏览器面板和 Claude in Chrome。回退前说明具体原因。
 - 用户点名其他浏览器或工具时，按用户指定。
