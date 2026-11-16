@@ -18,7 +18,8 @@ Use this skill for git release promotion tasks that follow a repeatable backport
 - Author scope: only process the current author by default; include another author only when the user explicitly names that author or asks to process that other author's commits.
 - Missing-on-target rule: patch-equivalent, not raw commit hash
 - Preflight checks: `git fetch --all --prune --tags` and clean `git status`
-- Tag style: lightweight
+- Tag style: annotated, message `chore: release vX.Y.Z`
+- Release commit: when the target branch has a root `package.json` with a `version` field, set it (and the root version in `package-lock.json`) to the new tag without the `v`, commit as `chore: release vX.Y.Z`, and tag that commit. The tag version is authoritative; do not keep a separate hand-maintained `package.json` version. Backend `pom.xml`/`build.gradle` and uni-app `manifest.json` versions are not touched. Repositories without such a `package.json` get only the annotated tag on the last cherry-picked commit. The release commit stays on the target branch and is not pushed back to the source branch.
 - Release batching invariant: one user release request plus one repository produces at most one new tag. Collect every confirmed commit for that repository first, cherry-pick them in source order, then tag and push once.
 
 ## Script
@@ -35,7 +36,7 @@ Do not use the legacy `~/.codex/skills/release-ops/...` path; this skill is inst
 Typical flow:
 
 1. Run `inspect` first.
-2. Review blockers, warnings, pending commits, target branch, and proposed tag.
+2. Review blockers, warnings, pending commits, target branch, proposed tag, and `package_version_change`.
 3. Run `execute` only when the user has authorized this release scope (including its branch/tag publication) and the script reports no blockers. Inspect-only requests remain read-only; reuse an already confirmed commit list only within the same release request (see [Execution Rules](#execution-rules)).
 4. Apply [Batch Confirmation](#batch-confirmation) when the pending-count threshold is exceeded. Reuse explicit authorization from the same release request for the same exact commit list and target; pass `--confirm-all` with repeated `--commit <sha>` selectors instead of asking again.
 5. Use `--sync-target` with execute mode when the local target branch may be behind `origin/<target>`; it only fast-forwards when there are no local-only target commits.
@@ -157,7 +158,7 @@ The pending-count threshold protects unconfirmed release scope; it does not inva
 - For the bump decision, ask only when inference is not confident enough. Other release authorization and risk stops still apply.
 - Use the latest SemVer tag reachable from the target branch only.
 - If the latest reachable tag is not `vX.Y.Z`, stop and report the problem.
-- Before creating the tag, clearly state: current reachable tag -> target tag.
+- Before creating the tag, clearly state: current reachable tag -> target tag, plus the `package.json` version change when the script reports one.
 
 ## Risk Stops
 
@@ -188,8 +189,9 @@ Execute mode:
 2. report the target branch
 3. report the tag plan
 4. cherry-pick
-5. push branch and tag
-6. verify remote refs
+5. create the `chore: release vX.Y.Z` release commit when a `package.json` version exists, then the annotated tag
+6. push branch and tag
+7. verify remote refs
 
 Use [Production Release Completion](../../../.codex/docs/workflows/harness-engineering.md#production-release-completion) as the completion boundary: stop after successful publication and remote-ref verification by default. Do not query or wait for production CI/build/deployment unless the user explicitly requests it; report those results as unchecked.
 

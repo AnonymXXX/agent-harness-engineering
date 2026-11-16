@@ -107,6 +107,7 @@ class Analysis:
     needs_confirmation: bool
     latest_reachable_tag: str | None
     proposed_tag: str | None
+    package_version_change: str | None
     matched_count: int
     selected_cluster_count: int
 
@@ -548,6 +549,67 @@ def tag_exists_remote(repo: Path, tag: str) -> bool:
     return bool(raw.strip())
 
 
+def release_message(tag: str) -> str:
+    return f"chore: release {tag}"
+
+
+def package_version_change(repo: Path, ref: str, tag: str | None) -> str | None:
+    if tag is None:
+        return None
+    raw = run_cmd(repo, ["git", "show", f"{ref}:package.json"], check=False)
+    if not raw:
+        return None
+    current = json.loads(raw).get("version")
+    if not isinstance(current, str):
+        return None
+    return f"package.json {current} -> {tag.removeprefix('v')}"
+
+
+def set_package_version(path: Path, version: str) -> bool:
+    # Replace only the version values so hand-written formatting and line endings stay intact.
+    text = path.read_bytes().decode("utf-8")
+    expected = json.loads(text)
+    if not isinstance(expected.get("version"), str):
+        return False
+    targets = [expected]
+    root_package = expected.get("packages", {}).get("")
+    if isinstance(root_package, dict) and isinstance(root_package.get("version"), str):
+        targets.append(root_package)
+
+    updated = text
+    position = 0
+    for target in targets:
+        pattern = re.compile(r'("version"\s*:\s*)"' + re.escape(target["version"]) + '"')
+        match = pattern.search(updated, position)
+        if match is None:
+            raise GitCommandError(f"could not locate version field in {path.name}")
+        replacement = f'{match.group(1)}"{version}"'
+        updated = updated[: match.start()] + replacement + updated[match.end() :]
+        position = match.start() + len(replacement)
+        target["version"] = version
+
+    if json.loads(updated) != expected:
+        raise GitCommandError(f"version update changed unexpected fields in {path.name}")
+    if updated == text:
+        return False
+    path.write_bytes(updated.encode("utf-8"))
+    return True
+
+
+def create_release_commit(repo: Path, tag: str) -> str | None:
+    version = tag.removeprefix("v")
+    package = repo / "package.json"
+    if not package.is_file() or not set_package_version(package, version):
+        return None
+    changed = ["package.json"]
+    lock = repo / "package-lock.json"
+    if lock.is_file() and set_package_version(lock, version):
+        changed.append("package-lock.json")
+    run_cmd(repo, ["git", "add", *changed])
+    run_cmd(repo, ["git", "commit", "-m", release_message(tag)])
+    return run_cmd(repo, ["git", "rev-parse", "HEAD"]).strip()
+
+
 def detect_related_other_author_commits(
     commits: list[Commit],
     feature: str | None,
@@ -660,6 +722,7 @@ def build_analysis(args: argparse.Namespace, skill_dir: Path) -> Analysis:
             needs_confirmation=True,
             latest_reachable_tag=None,
             proposed_tag=None,
+            package_version_change=None,
             matched_count=0,
             selected_cluster_count=0,
         )
@@ -781,6 +844,7 @@ def build_analysis(args: argparse.Namespace, skill_dir: Path) -> Analysis:
         needs_confirmation=bool(blockers),
         latest_reachable_tag=latest_tag,
         proposed_tag=proposed_tag,
+        package_version_change=package_version_change(repo, target_ref, proposed_tag),
         matched_count=len(matched_commits),
         selected_cluster_count=selected_cluster_count,
     )
@@ -849,7 +913,11 @@ def execute_plan(repo: Path, analysis: Analysis, sync_target: bool = False) -> d
         cherry_pick_commits(repo, analysis.pending_commits)
         if analysis.proposed_tag is None:
             raise GitCommandError("missing proposed tag in execute mode")
-        run_cmd(repo, ["git", "tag", analysis.proposed_tag])
+        release_commit = create_release_commit(repo, analysis.proposed_tag)
+        run_cmd(
+            repo,
+            ["git", "tag", "-a", analysis.proposed_tag, "-m", release_message(analysis.proposed_tag)],
+        )
         run_cmd(repo, ["git", "push", "origin", analysis.target_branch, analysis.proposed_tag])
         remote_branch_sha = run_cmd(
             repo,
@@ -873,6 +941,7 @@ def execute_plan(repo: Path, analysis: Analysis, sync_target: bool = False) -> d
     return {
         "pushedBranch": analysis.target_branch,
         "pushedTag": analysis.proposed_tag,
+        "releaseCommit": release_commit,
         "remoteBranchRef": remote_branch_sha,
         "remoteTagRef": remote_tag_sha,
         "restoredBranch": restored_branch,
@@ -925,6 +994,8 @@ def print_text_report(analysis: Analysis, execution: dict[str, Any] | None = Non
         lines.append(f"latest_reachable_tag: {analysis.latest_reachable_tag}")
     if analysis.proposed_tag:
         lines.append(f"proposed_tag: {analysis.proposed_tag}")
+    if analysis.package_version_change:
+        lines.append(f"package_version_change: {analysis.package_version_change}")
     if analysis.warnings:
         lines.append("warnings:")
         for item in analysis.warnings:

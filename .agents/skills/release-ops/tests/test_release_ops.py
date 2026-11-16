@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -114,6 +115,129 @@ class ExplicitCommitBatchTests(unittest.TestCase):
             )
 
             self.assertEqual([first_sha, second_sha], [commit.sha for commit in commits])
+
+
+def init_release_repo(root: Path, files: dict[str, str]) -> Path:
+    origin = root / "origin.git"
+    repo = root / "work"
+    run("git", "init", "--bare", "-b", "release", str(origin), cwd=root)
+    run("git", "clone", "-q", str(origin), str(repo), cwd=root)
+    run("git", "config", "user.name", "Release Test", cwd=repo)
+    run("git", "config", "user.email", "release@example.test", cwd=repo)
+    for name, content in files.items():
+        (repo / name).write_bytes(content.encode("utf-8"))
+    run("git", "add", "-A", cwd=repo)
+    run("git", "commit", "-m", "base", cwd=repo)
+    run("git", "tag", "v3.23.7", cwd=repo)
+    run("git", "push", "-q", "origin", "HEAD:release", "v3.23.7", cwd=repo)
+
+    run("git", "switch", "-c", "uat", cwd=repo)
+    (repo / "feature.txt").write_text("feature\n", encoding="utf-8")
+    run("git", "add", "feature.txt", cwd=repo)
+    run("git", "commit", "-m", "fix: 修复合同金额判空", cwd=repo)
+    run("git", "push", "-q", "origin", "uat", cwd=repo)
+    run("git", "fetch", "-q", "origin", cwd=repo)
+    return repo
+
+
+def release_analysis(repo: Path) -> release_ops.Analysis:
+    return release_ops.Analysis(
+        mode="execute",
+        repo=str(repo),
+        source_branch="uat",
+        source_ref="origin/uat",
+        target_branch="release",
+        target_ref="origin/release",
+        author="Release Test",
+        since=None,
+        until=None,
+        feature=None,
+        commit_selectors=[],
+        pending_count=1,
+        pending_commits=release_ops.resolve_explicit_commits(repo, "origin/uat", ["uat"]),
+        related_other_author_commits=[],
+        suggested_bump="patch",
+        bump_confidence="high",
+        blockers=[],
+        warnings=[],
+        threshold_exceeded=False,
+        needs_confirmation=False,
+        latest_reachable_tag="v3.23.7",
+        proposed_tag="v3.23.8",
+        package_version_change=release_ops.package_version_change(repo, "origin/release", "v3.23.8"),
+        matched_count=1,
+        selected_cluster_count=0,
+    )
+
+
+class ReleaseCommitTests(unittest.TestCase):
+    def test_set_package_version_keeps_formatting_and_dependency_versions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "package.json"
+            package.write_bytes(b'{\r\n    "name": "csc",\r\n    "version" : "3.2.8"\r\n}\r\n')
+            lock = Path(tmp) / "package-lock.json"
+            lock.write_bytes(
+                (
+                    '{\n  "name": "csc",\n  "version": "3.2.8",\n  "lockfileVersion": 3,\n'
+                    '  "packages": {\n    "": {\n      "name": "csc",\n      "version": "3.2.8"\n    },\n'
+                    '    "node_modules/dep": {\n      "version": "3.2.8"\n    }\n  }\n}\n'
+                ).encode("utf-8")
+            )
+
+            self.assertTrue(release_ops.set_package_version(package, "3.23.8"))
+            self.assertTrue(release_ops.set_package_version(lock, "3.23.8"))
+
+            self.assertEqual(
+                b'{\r\n    "name": "csc",\r\n    "version" : "3.23.8"\r\n}\r\n',
+                package.read_bytes(),
+            )
+            self.assertEqual(
+                ["3.23.8", "3.23.8", "3.2.8"],
+                [match.group(1) for match in re.finditer(r'"version": "([^"]+)"', lock.read_text())],
+            )
+
+    def test_execute_commits_package_version_and_tags_release_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_release_repo(
+                Path(tmp),
+                {"package.json": '{\n  "name": "csc",\n  "version": "3.2.8"\n}\n'},
+            )
+            analysis = release_analysis(repo)
+            self.assertEqual("package.json 3.2.8 -> 3.23.8", analysis.package_version_change)
+
+            execution = release_ops.execute_plan(repo, analysis)
+
+            run("git", "fetch", "-q", "--tags", "origin", cwd=repo)
+            self.assertEqual(
+                ["chore: release v3.23.8", "fix: 修复合同金额判空", "base"],
+                run("git", "log", "--format=%s", "origin/release", cwd=repo).splitlines(),
+            )
+            self.assertEqual(execution["releaseCommit"], run("git", "rev-parse", "origin/release", cwd=repo))
+            self.assertIn('"version": "3.23.8"', run("git", "show", "origin/release:package.json", cwd=repo))
+            self.assertEqual("tag", run("git", "cat-file", "-t", "v3.23.8", cwd=repo))
+            self.assertEqual("chore: release v3.23.8", run("git", "tag", "-l", "--format=%(contents:subject)", "v3.23.8", cwd=repo))
+            self.assertEqual(execution["releaseCommit"], run("git", "rev-parse", "v3.23.8^{commit}", cwd=repo))
+            self.assertEqual("uat", execution["restoredBranch"])
+
+    def test_execute_without_package_version_only_creates_annotated_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_release_repo(Path(tmp), {"build.gradle": "version '1.0-SNAPSHOT'\n"})
+            analysis = release_analysis(repo)
+            self.assertIsNone(analysis.package_version_change)
+
+            execution = release_ops.execute_plan(repo, analysis)
+
+            run("git", "fetch", "-q", "--tags", "origin", cwd=repo)
+            self.assertIsNone(execution["releaseCommit"])
+            self.assertEqual(
+                "fix: 修复合同金额判空",
+                run("git", "log", "-1", "--format=%s", "origin/release", cwd=repo),
+            )
+            self.assertEqual("tag", run("git", "cat-file", "-t", "v3.23.8", cwd=repo))
+            self.assertEqual(
+                run("git", "rev-parse", "origin/release", cwd=repo),
+                run("git", "rev-parse", "v3.23.8^{commit}", cwd=repo),
+            )
 
 
 if __name__ == "__main__":

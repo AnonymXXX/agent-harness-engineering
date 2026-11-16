@@ -11,7 +11,7 @@
     "step": 1,
     "max": 4
   },
-  "tagStyle": "lightweight",
+  "tagStyle": "annotated",
   "missingRule": "patch-equivalent",
   "allowDirectPushTargets": [
     "release",
