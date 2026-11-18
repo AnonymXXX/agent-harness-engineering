@@ -195,6 +195,8 @@ Execute mode:
 
 Use [Production Release Completion](../../../.codex/docs/workflows/harness-engineering.md#production-release-completion) as the completion boundary: stop after successful publication and remote-ref verification by default. Do not query or wait for production CI/build/deployment unless the user explicitly requests it; report those results as unchecked.
 
+This boundary covers waiting for CI, not deployment steps that a tag push does not perform. When an installed project deploy skill says the request's wording (for example `上线` / `发布上线` / `上生产` for a service that only changes in production after a manual k8s apply) asks for that deployment, continue with that skill after remote-ref verification instead of ending the turn; that skill owns waiting for the tag pipeline and its own confirmation step.
+
 ## Resources
 
 - Deterministic CLI: `scripts/release_ops.py`
