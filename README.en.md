@@ -94,10 +94,12 @@ Code, or Pi), then create the symlinks manually. The shared part for every agent
 ```bash
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering
 H=~/.local/share/agent-harness-engineering
-mkdir -p ~/.codex ~/.agents/skills
+mkdir -p ~/.codex ~/.agents/skills ~/.config/git
 ln -s $H/.codex/AGENTS.md ~/.codex/AGENTS.md
 ln -s $H/.codex/docs ~/.codex/docs
 git -C $H config core.hooksPath .githooks
+# Task worktrees live in .claude/worktrees/ inside repositories; ignore it globally so git add . never stages one
+grep -qxF '.claude/worktrees/' ~/.config/git/ignore 2>/dev/null || echo '.claude/worktrees/' >> ~/.config/git/ignore
 for skill in $H/.agents/skills/*; do
   ln -s "$skill" ~/.agents/skills/
 done

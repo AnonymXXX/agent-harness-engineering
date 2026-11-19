@@ -71,6 +71,30 @@ class CheckCommitMessageTests(unittest.TestCase):
         self.assertBlocked(bad, reason="超过 50 字")
         self.assertBlocked(stdin, reason="超过 50 字")
 
+    def test_multiline_commands_are_checked(self) -> None:
+        self.assertBlocked(f'git add a\ngit commit -m "{LONG}"', reason="超过 50 字")
+        self.assertBlocked(f'git add a && \\\n  git commit -m "{LONG}"', reason="超过 50 字")
+        self.assertAllowed('git add a\ngit commit -m "修复礼炮位置"')
+
+    def test_heredoc_body_with_apostrophe_is_checked(self) -> None:
+        command = f"git commit -F - <<'EOF'\n{LONG}\n\n- don't keep the old layout\nEOF"
+        self.assertBlocked(command, reason="超过 50 字")
+
+    def test_message_file_written_by_the_same_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "msg.txt").write_text(LONG + "\n", encoding="utf-8")
+            good = "M=msg.txt && cat > $M <<'EOF'\n修复礼炮位置\n\n- 改为相对列表定位\nEOF\ngit commit -F $M"
+            bad = f"cat > msg.txt <<'EOF'\n{LONG}\nEOF\ngit commit -F msg.txt"
+            other = "printf '修复礼炮位置\\n' > msg.txt && git commit -F msg.txt"
+            self.assertAllowed(good, cwd=tmp)
+            self.assertBlocked(bad, cwd=tmp, reason="超过 50 字")
+            self.assertAllowed(other, cwd=tmp)
+
+    def test_non_object_hook_input_is_ignored(self) -> None:
+        for payload in ("[]", '"git commit"', '{"tool_input": "git commit"}'):
+            result = subprocess.run([sys.executable, str(SCRIPT)], input=payload, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+
     def test_unreadable_messages_pass(self) -> None:
         self.assertAllowed("git commit")
         self.assertAllowed("git commit --amend --no-edit")

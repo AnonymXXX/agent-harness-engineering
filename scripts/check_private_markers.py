@@ -10,6 +10,8 @@ Usage:
 
 Without REV it scans HEAD. With --pre-push it scans every commit being pushed that no
 `origin` branch already contains, so a marker added and later removed is still caught.
+Each revision is checked for file contents, file paths, author and committer names and
+emails, and the commit message; a pushed annotated tag's message is checked as well.
 Exit 0 when clean, 1 on any hit, 2 when the denylist is missing or git fails.
 """
 
@@ -45,30 +47,53 @@ def load_patterns(path: Path) -> list[str]:
     return patterns
 
 
-def pushed_commits(repo: Path, stdin_lines: list[str]) -> list[str]:
+def pushed_objects(repo: Path, stdin_lines: list[str]) -> tuple[list[str], list[str]]:
+    """Return (commits, annotated tag objects) that this push would publish."""
     commits: list[str] = []
+    tags: list[str] = []
     for line in stdin_lines:
         parts = line.split()
         if len(parts) != 4 or parts[1] == ZERO_SHA:
             continue  # malformed line or a branch deletion
+        if git(repo, "cat-file", "-t", parts[1]).stdout.strip() == "tag":
+            tags.append(parts[1])
         listing = git(repo, "rev-list", parts[1], "--not", "--remotes=origin")
         commits.extend(listing.stdout.split())
-    return list(dict.fromkeys(commits))
+    return list(dict.fromkeys(commits)), list(dict.fromkeys(tags))
 
 
-def scan(repo: Path, revs: list[str], denylist: Path) -> list[str]:
+def grep_text(text: str, patterns: list[str], label: str) -> list[str]:
+    """Match text with the same case-insensitive ERE semantics as `git grep -i -E`."""
+    args = ["grep", "-n", "-i", "-E"]
+    for pattern in patterns:
+        args += ["-e", pattern]
+    proc = subprocess.run(args, input=text, capture_output=True, text=True)
+    if proc.returncode == 1:
+        return []
+    if proc.returncode != 0:
+        print(f"ERROR: grep failed on {label}: {proc.stderr.strip()}", file=sys.stderr)
+        sys.exit(2)
+    return [f"{label}:{hit}" for hit in proc.stdout.splitlines()]
+
+
+def scan(repo: Path, revs: list[str], denylist: Path, tags: list[str] | None = None) -> list[str]:
+    patterns = load_patterns(denylist)
     args = ["grep", "-n", "-I", "-i", "-E"]
-    for pattern in load_patterns(denylist):
+    for pattern in patterns:
         args += ["-e", pattern]
     hits: list[str] = []
     for rev in revs:
         proc = git(repo, *args, rev, "--", ".", check=False)
-        if proc.returncode == 1:
-            continue  # no match
-        if proc.returncode != 0:
+        if proc.returncode not in (0, 1):
             print(f"ERROR: git grep failed on {rev}: {proc.stderr.strip()}", file=sys.stderr)
             sys.exit(2)
         hits.extend(proc.stdout.splitlines())
+        meta = git(repo, "log", "-1", "--format=%an%n%ae%n%cn%n%ce%n%B", rev).stdout
+        hits.extend(grep_text(meta, patterns, f"{rev[:12]} metadata"))
+        paths = git(repo, "ls-tree", "-r", "--name-only", rev).stdout
+        hits.extend(grep_text(paths, patterns, f"{rev[:12]} path"))
+    for tag in tags or []:
+        hits.extend(grep_text(git(repo, "cat-file", "-p", tag).stdout, patterns, f"tag {tag[:12]}"))
     return hits
 
 
@@ -85,10 +110,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     repo = Path(git(args.repo, "rev-parse", "--show-toplevel").stdout.strip())
-    revs = pushed_commits(repo, sys.stdin.read().splitlines()) if args.pre_push else (args.revs or ["HEAD"])
-    if not revs:
+    tags: list[str] = []
+    if args.pre_push:
+        revs, tags = pushed_objects(repo, sys.stdin.read().splitlines())
+    else:
+        revs = args.revs or ["HEAD"]
+    if not revs and not tags:
         return 0
-    hits = scan(repo, revs, args.denylist)
+    hits = scan(repo, revs, args.denylist, tags)
     if hits:
         print("Private markers found; remove them before publishing:", file=sys.stderr)
         for hit in hits[:50]:

@@ -198,6 +198,20 @@ class IntegrationPreflightTests(unittest.TestCase):
         self.assertTrue(payload["baseline_checked"])
         self.assertIn("not an ancestor", payload["reason"])
 
+    def test_merged_side_branch_in_task_range_stops(self) -> None:
+        run_git("switch", "-c", "codex/other", self.task_base, cwd=self.repo)
+        (self.repo / "other.txt").write_text("other\n", encoding="utf-8")
+        run_git("add", "other.txt", cwd=self.repo)
+        run_git("commit", "-m", "other unpublished", cwd=self.repo)
+        run_git("switch", "codex/task", cwd=self.repo)
+        run_git("merge", "--no-ff", "codex/other", "-m", "merge other", cwd=self.repo)
+
+        result, payload = self.run_preflight()
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual("STOP", payload["action"])
+        self.assertIn("merge commit", payload["reason"])
+
     def test_task_already_on_target_is_reported(self) -> None:
         run_git("push", "origin", "codex/task:main", cwd=self.repo)
 

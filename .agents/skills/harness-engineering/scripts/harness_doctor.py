@@ -49,6 +49,7 @@ AGENT_BRANCH_PREFIXES = ("codex/", "claude/", "pi/")
 CLEANUP_STATE_FILE = Path.home() / ".agents" / "state" / "harness-cleanup.json"
 WORKTREE_DEBT_STATES = {
     "dirty",
+    "ignored-files",
     "clean-unmerged-or-rewritten",
     "detached",
     "missing-prunable",
@@ -499,13 +500,46 @@ def _ledger_coverage(repo: Path, path: str, branch: str | None) -> tuple[bool, s
     return False, None
 
 
+# Ignored paths that a build or install can recreate; any other ignored file (such as `.env`
+# or a local database) keeps the worktree, because `git worktree remove` deletes it silently.
+REBUILDABLE_IGNORED_NAMES = {
+    ".DS_Store",
+    ".cache",
+    ".mypy_cache",
+    ".next",
+    ".nuxt",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".turbo",
+    ".venv",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+    "target",
+    "unpackage",
+    "venv",
+}
+
+
+def _is_rebuildable_ignored(path: str) -> bool:
+    return any(part in REBUILDABLE_IGNORED_NAMES for part in path.rstrip("/").split("/"))
+
+
 def _worktree_state(repo: Path, item: dict[str, Any], integration_branch: str) -> str:
     path = Path(item["path"])
     if not path.exists():
         return "missing-prunable"
-    status = _run_git(path, "status", "--porcelain", check_result=False)
-    if status.returncode != 0 or status.stdout.strip():
+    status = _run_git(path, "status", "--porcelain", "--ignored", check_result=False)
+    if status.returncode != 0:
         return "dirty"
+    lines = [line for line in status.stdout.splitlines() if line.strip()]
+    if any(not line.startswith("!! ") for line in lines):
+        return "dirty"
+    if any(not _is_rebuildable_ignored(line[3:]) for line in lines):
+        return "ignored-files"
     if item.get("detached"):
         return "detached"
     branch = item.get("branch")
@@ -604,7 +638,7 @@ def scan_worktrees(
         if len(worktrees) <= 1:
             continue
         integration = worktrees[0]
-        integration_branch = integration.get("branch") or integration.get("HEAD")
+        integration_branch = integration.get("branch") or integration.get("HEAD") or "HEAD"
         for item in worktrees[1:]:
             state = _worktree_state(repo, item, integration_branch)
             branch = item.get("branch")
@@ -1084,7 +1118,26 @@ def cleanup_worktrees(
         worktrees = _parse_worktree_porcelain(listing.stdout)
         if not worktrees:
             continue
-        integration_branch = worktrees[0].get("branch") or worktrees[0].get("HEAD")
+        integration_branch = worktrees[0].get("branch")
+        if (
+            worktrees[0].get("bare")
+            or not integration_branch
+            or integration_branch.removeprefix("refs/heads/").startswith(AGENT_BRANCH_PREFIXES)
+        ):
+            # Containment is checked against the main checkout's branch. When that checkout is
+            # bare, detached, or itself on an agent task branch, "merged" would mean merged into
+            # unrelated task work, so the repository is skipped instead of guessing.
+            checks.append(
+                check(
+                    "warning",
+                    "cleanup-integration-branch-unknown",
+                    f"Skipped cleanup for {repo}: the main checkout is not on an integration branch "
+                    f"({integration_branch or 'bare or detached'})",
+                    section="worktrees",
+                    repo=str(repo),
+                )
+            )
+            continue
         for item in worktrees[1:]:
             state = _worktree_state(repo, item, integration_branch)
             branch_ref = item.get("branch")

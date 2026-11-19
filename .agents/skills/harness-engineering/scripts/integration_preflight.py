@@ -209,6 +209,12 @@ def preflight(
                 task_shared=task_shared,
                 fetched=fetched,
             )
+        merges = _git_stdout(root, "rev-list", "--merges", f"{task_base_oid}..{task_oid}")
+        if merges:
+            raise PreflightError(
+                f"task range contains {len(merges.splitlines())} merge commit(s); "
+                "merged branches may carry unpublished work outside the task"
+            )
         target_is_task_ancestor = _is_ancestor(root, target_oid, task_oid)
         if direct_target and not target_is_task_ancestor:
             raise PreflightError(

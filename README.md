@@ -84,10 +84,12 @@ Agent 只能分析当前任务中你明确授权且本机可访问的内容。�
 ```bash
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering
 H=~/.local/share/agent-harness-engineering
-mkdir -p ~/.codex ~/.agents/skills
+mkdir -p ~/.codex ~/.agents/skills ~/.config/git
 ln -s $H/.codex/AGENTS.md ~/.codex/AGENTS.md
 ln -s $H/.codex/docs ~/.codex/docs
 git -C $H config core.hooksPath .githooks
+# 任务 worktree 放在仓库内的 .claude/worktrees/，全局忽略，避免 git add . 把它当嵌套仓库提交
+grep -qxF '.claude/worktrees/' ~/.config/git/ignore 2>/dev/null || echo '.claude/worktrees/' >> ~/.config/git/ignore
 for skill in $H/.agents/skills/*; do
   ln -s "$skill" ~/.agents/skills/
 done

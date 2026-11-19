@@ -63,6 +63,29 @@ class PrivateMarkerTests(unittest.TestCase):
         push_line = f"refs/heads/main {tip} refs/heads/main {'1' * 40}\n"
         self.assertEqual(1, self.check("--pre-push", stdin=push_line))
 
+    def test_commit_message_and_path_markers_are_blocked(self) -> None:
+        run("git", "commit", "--allow-empty", "-m", "接入 acme-internal 网关", cwd=self.repo)
+        self.assertEqual(1, self.check())
+        run("git", "commit", "--amend", "--allow-empty", "-m", "public message", cwd=self.repo)
+        self.assertEqual(0, self.check())
+        (self.repo / "acme-internal").mkdir()
+        self.commit("acme-internal/notes.md", "public text\n")
+        self.assertEqual(1, self.check())
+
+    def test_author_email_marker_is_blocked(self) -> None:
+        run("git", "commit", "--allow-empty", "-m", "public", "--author", "Dev <dev@acme-internal.example>", cwd=self.repo)
+        self.assertEqual(1, self.check())
+
+    def test_pre_push_scans_annotated_tag_message(self) -> None:
+        remote = self.root / "remote.git"
+        run("git", "init", "--bare", str(remote), cwd=self.root)
+        run("git", "remote", "add", "origin", str(remote), cwd=self.repo)
+        run("git", "push", "origin", "main", cwd=self.repo)
+        run("git", "tag", "-a", "v1.0.0", "-m", "acme-internal release", cwd=self.repo)
+        tag = run("git", "rev-parse", "v1.0.0", cwd=self.repo)
+        push_line = f"refs/tags/v1.0.0 {tag} refs/tags/v1.0.0 {'0' * 40}\n"
+        self.assertEqual(1, self.check("--pre-push", stdin=push_line))
+
     def test_missing_denylist_fails_closed(self) -> None:
         self.denylist.unlink()
         with self.assertRaises(SystemExit) as raised, contextlib.redirect_stderr(io.StringIO()):

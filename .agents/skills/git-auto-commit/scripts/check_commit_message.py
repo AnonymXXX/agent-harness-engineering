@@ -11,7 +11,9 @@ Reads the hook JSON from stdin. When the Bash command runs `git commit` with a m
 - the message contains a literal backslash-n instead of a real line break.
 
 Commits whose message cannot be read (editor, -C/-c reuse, --no-edit, unreadable file)
-are let through: the hook only blocks what it can see.
+are let through: the hook only blocks what it can see. The hook runs before the command,
+so a `-F <file>` that the same command writes through a heredoc is checked against that
+heredoc, and a file the command writes some other way is not read from disk.
 """
 
 from __future__ import annotations
@@ -25,36 +27,72 @@ import sys
 MAX_SUBJECT = 50
 SEPARATORS = {"&&", "||", ";", "|", "&", "\n"}
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*?)\n[ \t]*\2[ \t]*(?:\n|$)", re.S)
+PLACEHOLDER = re.compile(r"^__HEREDOC_(\d+)__$")
+REDIRECT = re.compile(r">>?\s*(['\"]?)([^\s'\";&|<>]+)\1")
+
+
+class Command:
+    """A Bash command with heredoc bodies replaced by placeholders before lexing.
+
+    Heredoc bodies are free text, so lexing them as shell code fails on an apostrophe; the
+    placeholders keep the lexer on real shell syntax while the bodies stay available.
+    """
+
+    def __init__(self, text: str) -> None:
+        self.original = text
+        self.bodies: list[str] = []
+        self.written: dict[str, str] = {}
+        pieces: list[str] = []
+        last = 0
+        for match in HEREDOC.finditer(text):
+            index = len(self.bodies)
+            self.bodies.append(match.group(3))
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            header = text[line_start : match.start(3)]
+            target = REDIRECT.search(header)
+            if target:
+                self.written[target.group(2)] = match.group(3)
+            pieces.append(text[last : match.start(3)])
+            pieces.append(f"__HEREDOC_{index}__")
+            last = match.end(3)
+        pieces.append(text[last:])
+        self.lexable = "".join(pieces).replace("\\\n", " ")
+
+    def body(self, text: str) -> str | None:
+        match = HEREDOC.search(text)
+        if not match:
+            return None
+        placeholder = PLACEHOLDER.match(match.group(3).strip())
+        return self.bodies[int(placeholder.group(1))] if placeholder else match.group(3)
+
+    def writes(self, path: str) -> bool:
+        return any(target.group(2) == path for target in REDIRECT.finditer(self.lexable))
 
 
 def split_segments(command: str) -> list[list[str]]:
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|\n")
+    lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     lexer.commenters = ""
     segments: list[list[str]] = [[]]
     for token in lexer:
-        if token in SEPARATORS or set(token) <= set(";&|"):
+        if token in SEPARATORS or set(token) <= set(";&|\n"):
             segments.append([])
         else:
             segments[-1].append(token)
     return [s for s in segments if s]
 
 
-def heredoc_body(text: str) -> str | None:
-    match = HEREDOC.search(text)
-    return match.group(3) if match else None
-
-
-def inline_message(value: str) -> str:
+def inline_message(value: str, command: Command) -> str:
     # Claude Code's own style: -m "$(cat <<'EOF' ... EOF)"
     if value.lstrip().startswith("$(") and "<<" in value:
-        body = heredoc_body(value)
+        body = command.body(value)
         if body is not None:
             return body
     return value
 
 
-def parse_commit(args: list[str], workdir: str, command: str) -> list[str] | None:
+def parse_commit(args: list[str], workdir: str, command: Command) -> list[str] | None:
     """Return message paragraphs, or None when the message is not given on the command line."""
     messages: list[str] = []
     i = 0
@@ -70,9 +108,9 @@ def parse_commit(args: list[str], workdir: str, command: str) -> list[str] | Non
         if arg == "--":
             break
         if arg.startswith("--message="):
-            messages.append(inline_message(arg.split("=", 1)[1]))
+            messages.append(inline_message(arg.split("=", 1)[1], command))
         elif arg == "--message" and nxt is not None:
-            messages.append(inline_message(nxt))
+            messages.append(inline_message(nxt, command))
             i += 1
         elif arg.startswith("--file=") or (arg == "--file" and nxt is not None):
             if arg == "--file":
@@ -95,7 +133,7 @@ def parse_commit(args: list[str], workdir: str, command: str) -> list[str] | Non
                         rest = nxt
                         i += 1
                     if flag == "m":
-                        messages.append(inline_message(rest))
+                        messages.append(inline_message(rest, command))
                     else:
                         text = read_file(rest, workdir, command)
                         if text is None:
@@ -110,9 +148,13 @@ def parse_commit(args: list[str], workdir: str, command: str) -> list[str] | Non
     return messages or None
 
 
-def read_file(path: str, workdir: str, command: str) -> str | None:
+def read_file(path: str, workdir: str, command: Command) -> str | None:
     if path == "-":
-        return heredoc_body(command)
+        return command.body(command.original)
+    if path in command.written:
+        return command.written[path]
+    if command.writes(path):
+        return None  # written by this same command; the file on disk is stale
     full = os.path.join(workdir, os.path.expanduser(path))
     try:
         with open(full, encoding="utf-8") as handle:
@@ -152,11 +194,13 @@ def main() -> int:
         data = json.load(sys.stdin)
     except ValueError:
         return 0
-    command = (data.get("tool_input") or {}).get("command") or ""
-    if "commit" not in command or "git" not in command:
+    tool_input = data.get("tool_input") if isinstance(data, dict) else None
+    text = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if not isinstance(text, str) or "commit" not in text or "git" not in text:
         return 0
+    command = Command(text)
     try:
-        segments = split_segments(command)
+        segments = split_segments(command.lexable)
     except ValueError:
         return 0
     workdir = data.get("cwd") or os.getcwd()

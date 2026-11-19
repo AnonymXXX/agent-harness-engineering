@@ -571,6 +571,61 @@ class WorktreeTests(unittest.TestCase):
             self.assertNotIn(removed_branch, branches.splitlines())
         self.assertFalse([item for item in checks if item["severity"] == "error"])
 
+    def test_cleanup_keeps_worktrees_holding_non_rebuildable_ignored_files(self) -> None:
+        (self.repo / ".gitignore").write_text(".env\nnode_modules/\n", encoding="utf-8")
+        run("git", "add", ".gitignore", cwd=self.repo)
+        run("git", "commit", "-m", "ignore", cwd=self.repo)
+        secrets = self.add_worktree("with-env", "codex/with-env")
+        (secrets / ".env").write_text("TOKEN=local\n", encoding="utf-8")
+        deps = self.add_worktree("with-deps", "codex/with-deps")
+        (deps / "node_modules").mkdir()
+        (deps / "node_modules" / "pkg.js").write_text("x\n", encoding="utf-8")
+
+        records, _ = doctor.cleanup_worktrees(
+            [self.root / "projects"],
+            older_than_days=7,
+            dry_run=False,
+            now=datetime.now().astimezone() + timedelta(days=8),
+            active_cwds=set(),
+        )
+
+        by_name = {Path(item["path"]).name: item for item in records if item.get("path")}
+        self.assertEqual("ignored-files", by_name[secrets.name]["state"])
+        self.assertEqual("unsafe-state", by_name[secrets.name]["cleanup_status"])
+        self.assertTrue((secrets / ".env").exists())
+        self.assertEqual("removed", by_name[deps.name]["cleanup_status"])
+
+    def test_cleanup_skips_repo_when_main_checkout_is_on_an_agent_branch(self) -> None:
+        run("git", "switch", "-c", "claude/b", cwd=self.repo)
+        (self.repo / "b.txt").write_text("b\n", encoding="utf-8")
+        run("git", "add", "b.txt", cwd=self.repo)
+        run("git", "commit", "-m", "b work", cwd=self.repo)
+        run("git", "branch", "claude/c", cwd=self.repo)
+        run("git", "switch", "-c", "claude/a", cwd=self.repo)
+        (self.repo / "a.txt").write_text("a\n", encoding="utf-8")
+        run("git", "add", "a.txt", cwd=self.repo)
+        run("git", "commit", "-m", "a work", cwd=self.repo)
+        run("git", "switch", "claude/b", cwd=self.repo)
+        run("git", "switch", "claude/a", cwd=self.repo)
+        stacked = self.root / "worktrees" / "stacked"
+        stacked.parent.mkdir(exist_ok=True)
+        run("git", "worktree", "add", str(stacked), "claude/b", cwd=self.repo)
+
+        records, checks = doctor.cleanup_worktrees(
+            [self.root / "projects"],
+            older_than_days=7,
+            dry_run=False,
+            now=datetime.now().astimezone() + timedelta(days=8),
+            active_cwds=set(),
+        )
+
+        self.assertEqual([], records)
+        self.assertIn("cleanup-integration-branch-unknown", {item["code"] for item in checks})
+        self.assertTrue(stacked.exists())
+        branches = run("git", "branch", "--format=%(refname:short)", cwd=self.repo).splitlines()
+        self.assertIn("claude/b", branches)
+        self.assertIn("claude/c", branches)
+
     def test_cleanup_fails_closed_when_active_process_scan_is_unavailable(self) -> None:
         eligible = self.add_worktree("eligible-no-lsof", "codex/eligible-no-lsof")
         (self.repo / "main.txt").write_text("main\n", encoding="utf-8")
