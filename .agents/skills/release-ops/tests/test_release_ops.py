@@ -117,6 +117,25 @@ class ExplicitCommitBatchTests(unittest.TestCase):
             self.assertEqual([first_sha, second_sha], [commit.sha for commit in commits])
 
 
+    def test_list_commits_follows_branch_order_not_author_date(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run("git", "init", "-b", "main", cwd=repo)
+            run("git", "config", "user.name", "Release Test", cwd=repo)
+            run("git", "config", "user.email", "release@example.test", cwd=repo)
+            for name, date in (("base", "2026-01-01T00:00:00"), ("parent", "2026-01-03T00:00:00"), ("child", "2026-01-02T00:00:00")):
+                (repo / f"{name}.txt").write_text(name, encoding="utf-8")
+                run("git", "add", f"{name}.txt", cwd=repo)
+                subprocess.run(
+                    ["git", "commit", "-m", name, "--date", date],
+                    cwd=repo, check=True, capture_output=True,
+                )
+
+            commits = release_ops.list_commits(repo, "main", None, None)
+
+            self.assertEqual(["base", "parent", "child"], [commit.subject for commit in commits])
+
+
 def init_release_repo(root: Path, files: dict[str, str]) -> Path:
     origin = root / "origin.git"
     repo = root / "work"
@@ -238,6 +257,40 @@ class ReleaseCommitTests(unittest.TestCase):
                 run("git", "rev-parse", "origin/release", cwd=repo),
                 run("git", "rev-parse", "v3.23.8^{commit}", cwd=repo),
             )
+
+
+    def test_failed_cherry_pick_leaves_target_branch_and_tags_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = init_release_repo(Path(tmp), {"build.gradle": "version '1.0-SNAPSHOT'\n"})
+            (repo / "other.txt").write_text("from uat\n", encoding="utf-8")
+            run("git", "add", "other.txt", cwd=repo)
+            run("git", "commit", "-m", "fix: 第二个修复", cwd=repo)
+            run("git", "push", "-q", "origin", "uat", cwd=repo)
+            run("git", "switch", "-q", "-c", "tmp", "origin/release", cwd=repo)
+            (repo / "other.txt").write_text("conflicting\n", encoding="utf-8")
+            run("git", "add", "other.txt", cwd=repo)
+            run("git", "commit", "-m", "hotfix on release", cwd=repo)
+            run("git", "push", "-q", "origin", "tmp:release", cwd=repo)
+            run("git", "switch", "-q", "uat", cwd=repo)
+            run("git", "branch", "-D", "tmp", cwd=repo)
+            run("git", "fetch", "-q", "origin", cwd=repo)
+            remote_before = run("git", "rev-parse", "origin/release", cwd=repo)
+
+            with self.assertRaises(release_ops.GitCommandError) as raised:
+                analysis = release_analysis(repo)
+                analysis.pending_commits = release_ops.resolve_explicit_commits(
+                    repo, "origin/uat", ["uat~1", "uat"]
+                )
+                release_ops.execute_plan(repo, analysis, sync_target=True)
+
+            self.assertIn("cherry-pick", str(raised.exception))
+
+            run("git", "fetch", "-q", "--tags", "origin", cwd=repo)
+            self.assertEqual(remote_before, run("git", "rev-parse", "origin/release", cwd=repo))
+            self.assertEqual(remote_before, run("git", "rev-parse", "release", cwd=repo))
+            self.assertEqual("", run("git", "tag", "-l", "v3.23.8", cwd=repo))
+            self.assertEqual("uat", run("git", "branch", "--show-current", cwd=repo))
+            self.assertEqual("", run("git", "status", "--porcelain", cwd=repo))
 
 
 if __name__ == "__main__":

@@ -108,8 +108,9 @@ done
 Then add the part for each agent you use:
 
 ```bash
-# Codex: commit-message check hook (active after you trust it in Codex's /hooks)
+# Codex: commit-message check hook (active after you trust it in Codex's /hooks) and the DESIGN.md template
 ln -s $H/.codex/hooks.json ~/.codex/hooks.json
+ln -s $H/.codex/templates ~/.codex/templates
 
 # Claude Code: global rules, platform adapter, and skill discovery links
 mkdir -p ~/.claude/rules ~/.claude/skills
@@ -119,9 +120,11 @@ for skill in $H/.agents/skills/*; do
   ln -s "../../.agents/skills/$(basename "$skill")" ~/.claude/skills/
 done
 
-# Pi: global rules (Pi reads skills from ~/.agents/skills directly; no extra links needed)
-mkdir -p ~/.pi/agent
+# Pi: global rules, platform adapter, and commit-message check extension (Pi reads skills from ~/.agents/skills directly)
+mkdir -p ~/.pi/agent/extensions
 ln -s ~/.codex/AGENTS.md ~/.pi/agent/AGENTS.md
+ln -s $H/.pi/agent/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md
+ln -s $H/.pi/agent/extensions/commit-message-check.ts ~/.pi/agent/extensions/
 ```
 
 Finally, run the checks:
@@ -141,8 +144,9 @@ rules and skills.
   Codex's Browser/Chrome plugins or Claude's built-in browser and Claude in Chrome are fallbacks only.
 - `~/.claude/settings.json` holds machine settings and is not linked; merge the hooks from
   `.claude/settings.hooks.json` into it.
-- Pi's platform adapter and commit-message check extension are not yet included in this repository;
-  use `.claude/rules/harness-platform-adapter.md` as a reference if you need them.
+- The image-generation rule's model shim lives in `.local/share/agent-shims/codex-imagegen/` and works with
+  the third-party `baoyu-image-gen` skill; link it with
+  `mkdir -p ~/.local/share/agent-shims && ln -s $H/.local/share/agent-shims/codex-imagegen ~/.local/share/agent-shims/`.
 - `core.hooksPath` enables the pre-push check `scripts/check_private_markers.py`. It scans every
   commit being pushed and rejects the push on any match against the private denylist (default
   `~/.config/agent-harness/public-denylist.txt`, override with `HARNESS_PRIVATE_DENYLIST`), and also
@@ -167,8 +171,10 @@ mandatory steps:
 
 ## Layout
 
-- `.codex/`: global rules shared by all three agents, Harness workflow documents, and the Codex hook configuration.
+- `.codex/`: global rules shared by all three agents, Harness workflow documents, the `DESIGN.md` template, and the Codex hook configuration.
 - `.claude/`: the Claude Code platform adapter and hook fragment.
+- `.pi/`: the Pi platform adapter and commit-message check extension.
+- `.local/share/agent-shims/`: the image-generation model shim.
 - `scripts/`, `.githooks/`: the public repository's pre-push private-marker check.
 - `.agents/skills/`: the Harness skill family and its executable checks.
 

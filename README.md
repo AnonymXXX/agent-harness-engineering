@@ -98,8 +98,9 @@ done
 再按你用的 Agent 补上对应部分：
 
 ```bash
-# Codex：提交信息检查 hook（在 Codex 的 /hooks 中信任后生效）
+# Codex：提交信息检查 hook（在 Codex 的 /hooks 中信任后生效）和 DESIGN.md 模板
 ln -s $H/.codex/hooks.json ~/.codex/hooks.json
+ln -s $H/.codex/templates ~/.codex/templates
 
 # Claude Code：全局规则、平台适配规则和 Skill 发现链接
 mkdir -p ~/.claude/rules ~/.claude/skills
@@ -109,9 +110,11 @@ for skill in $H/.agents/skills/*; do
   ln -s "../../.agents/skills/$(basename "$skill")" ~/.claude/skills/
 done
 
-# Pi：全局规则（Pi 直接从 ~/.agents/skills 读取 Skill，不需要另建链接）
-mkdir -p ~/.pi/agent
+# Pi：全局规则、平台适配和提交信息检查扩展（Pi 直接从 ~/.agents/skills 读取 Skill，不需要另建链接）
+mkdir -p ~/.pi/agent/extensions
 ln -s ~/.codex/AGENTS.md ~/.pi/agent/AGENTS.md
+ln -s $H/.pi/agent/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md
+ln -s $H/.pi/agent/extensions/commit-message-check.ts ~/.pi/agent/extensions/
 ```
 
 最后检查：
@@ -129,8 +132,8 @@ uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py doctor
 - 浏览器默认使用 `magpie-browser` MCP（需安装 magpie 并在各 Agent 中注册），不可用时才回退到
   Codex 的 Browser/Chrome 插件或 Claude 的内置浏览器与 Claude in Chrome。
 - `~/.claude/settings.json` 含本机设置，不做链接；把 `.claude/settings.hooks.json` 中的 hook 合并进去即可。
-- Pi 的平台适配说明和提交信息检查扩展暂未收录在本仓库，需要时可参照
-  `.claude/rules/harness-platform-adapter.md` 自行编写。
+- 生图规则用到的模型垫片在 `.local/share/agent-shims/codex-imagegen/`，配合第三方 Skill `baoyu-image-gen` 使用；
+  需要时执行 `mkdir -p ~/.local/share/agent-shims && ln -s $H/.local/share/agent-shims/codex-imagegen ~/.local/share/agent-shims/`。
 - `core.hooksPath` 启用推送前检查 `scripts/check_private_markers.py`：它扫描每个待推送提交，
   命中私有黑名单（默认 `~/.config/agent-harness/public-denylist.txt`，可用 `HARNESS_PRIVATE_DENYLIST`
   指定）即拒绝推送；黑名单缺失时同样拒绝。
@@ -153,8 +156,10 @@ Git 历史恢复这两个文件后按当时的 README 使用。
 
 ## 目录结构
 
-- `.codex/`：三个 Agent 共用的全局规则、Harness 工作流文档与 Codex hook 配置。
+- `.codex/`：三个 Agent 共用的全局规则、Harness 工作流文档、`DESIGN.md` 模板与 Codex hook 配置。
 - `.claude/`：Claude Code 平台适配规则与 hook 片段。
+- `.pi/`：Pi 平台适配说明与提交信息检查扩展。
+- `.local/share/agent-shims/`：生图用的模型垫片。
 - `scripts/`、`.githooks/`：公开仓库的推送前私有信息检查。
 - `.agents/skills/`：Harness Skill 系列及其可执行检查。
 

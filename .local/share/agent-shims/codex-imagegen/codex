@@ -1,0 +1,9 @@
+#!/bin/sh
+# 生图垫片：baoyu-image-gen 的 codex-cli 没有模型参数，用 PATH 前置这个目录给 codex exec 注入模型。
+# 用户规则（2026-11-19）：生图固定用 gpt-6.1-sol、reasoning high、不开 fast；不再跟着新版 sol 换。
+MODEL="gpt-6.1-sol"
+if [ "$1" = "exec" ]; then
+  shift
+  exec /opt/homebrew/bin/codex exec -c model="\"$MODEL\"" -c model_reasoning_effort='"high"' -c service_tier='"default"' "$@"
+fi
+exec /opt/homebrew/bin/codex "$@"

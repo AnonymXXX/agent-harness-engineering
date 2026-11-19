@@ -303,7 +303,17 @@ def fetch_and_check_clean(repo: Path) -> None:
 
 def list_commits(repo: Path, ref: str, since: datetime | None, until: datetime | None) -> list[Commit]:
     format_str = "%H%x1f%an%x1f%aI%x1f%s%x1f%b%x1e"
-    cmd = ["git", "log", ref, f"--pretty=format:{format_str}", "--date=iso-strict"]
+    # Oldest first in branch (topological) order: cherry-picks must follow the source
+    # history, which author dates do not reflect after a rebase.
+    cmd = [
+        "git",
+        "log",
+        "--topo-order",
+        "--reverse",
+        ref,
+        f"--pretty=format:{format_str}",
+        "--date=iso-strict",
+    ]
     if since:
         cmd.append(f"--since={since.isoformat()}")
     if until:
@@ -343,7 +353,6 @@ def list_commits(repo: Path, ref: str, since: datetime | None, until: datetime |
                 diff=diff,
             )
         )
-    commits.sort(key=lambda item: item.authored_datetime())
     return commits
 
 
@@ -443,6 +452,7 @@ def connected_components(commits: list[Commit]) -> list[list[Commit]]:
     if not commits:
         return []
     by_sha = {commit.sha: commit for commit in commits}
+    order = {commit.sha: index for index, commit in enumerate(commits)}
     neighbors: dict[str, set[str]] = {commit.sha: set() for commit in commits}
     for idx, left in enumerate(commits):
         for right in commits[idx + 1 :]:
@@ -464,9 +474,9 @@ def connected_components(commits: list[Commit]) -> list[list[Commit]]:
                 if neighbor not in seen:
                     seen.add(neighbor)
                     stack.append(neighbor)
-        component.sort(key=lambda item: item.authored_datetime())
+        component.sort(key=lambda item: order[item.sha])
         components.append(component)
-    components.sort(key=lambda group: group[0].authored_datetime())
+    components.sort(key=lambda group: order[group[0].sha])
     return components
 
 
@@ -487,7 +497,8 @@ def expand_cluster(seed_commits: list[Commit], author_commits: list[Commit]) -> 
             if selected_files & set(commit.files):
                 selected[commit.sha] = commit
                 changed = True
-    return sorted(selected.values(), key=lambda item: item.authored_datetime())
+    order = {commit.sha: index for index, commit in enumerate(author_commits)}
+    return sorted(selected.values(), key=lambda item: order.get(item.sha, len(order)))
 
 
 def infer_bump(commits: list[Commit]) -> tuple[str | None, str | None]:
@@ -909,16 +920,40 @@ def execute_plan(repo: Path, analysis: Analysis, sync_target: bool = False) -> d
     original_branch = current_branch(repo)
     restored_branch = original_branch
     try:
-        ensure_local_target_branch(repo, analysis.target_branch, sync_target=sync_target)
-        cherry_pick_commits(repo, analysis.pending_commits)
         if analysis.proposed_tag is None:
             raise GitCommandError("missing proposed tag in execute mode")
-        release_commit = create_release_commit(repo, analysis.proposed_tag)
-        run_cmd(
-            repo,
-            ["git", "tag", "-a", analysis.proposed_tag, "-m", release_message(analysis.proposed_tag)],
-        )
-        run_cmd(repo, ["git", "push", "origin", analysis.target_branch, analysis.proposed_tag])
+        ensure_local_target_branch(repo, analysis.target_branch, sync_target=sync_target)
+        # Build the release on a detached HEAD so a failed cherry-pick or push leaves the
+        # local target branch untouched; the branch only moves after the atomic push succeeds.
+        run_cmd(repo, ["git", "switch", "--detach"])
+        tag_created = False
+        try:
+            cherry_pick_commits(repo, analysis.pending_commits)
+            release_commit = create_release_commit(repo, analysis.proposed_tag)
+            run_cmd(
+                repo,
+                ["git", "tag", "-a", analysis.proposed_tag, "-m", release_message(analysis.proposed_tag)],
+            )
+            tag_created = True
+            released = run_cmd(repo, ["git", "rev-parse", "HEAD"]).strip()
+            run_cmd(
+                repo,
+                [
+                    "git",
+                    "push",
+                    "--atomic",
+                    "origin",
+                    f"HEAD:refs/heads/{analysis.target_branch}",
+                    f"refs/tags/{analysis.proposed_tag}",
+                ],
+            )
+        except Exception:
+            if tag_created:
+                run_cmd(repo, ["git", "tag", "-d", analysis.proposed_tag], check=False)
+            run_cmd(repo, ["git", "switch", analysis.target_branch], check=False)
+            raise
+        run_cmd(repo, ["git", "switch", analysis.target_branch])
+        run_cmd(repo, ["git", "merge", "--ff-only", released])
         remote_branch_sha = run_cmd(
             repo,
             ["git", "ls-remote", "--heads", "origin", analysis.target_branch],
