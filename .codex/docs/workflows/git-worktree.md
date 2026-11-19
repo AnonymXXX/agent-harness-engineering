@@ -77,7 +77,7 @@ Do not leave the integration or main worktree dirty just to record ledger status
 - Keep local-target maintenance separate from remote integration. A divergent local `uat`, `main`, or other integration branch is not evidence that the remote target requires an MR and must not block an otherwise safe remote fast-forward.
 - Apply [Local Auto-Merge](#local-auto-merge) independently of remote push authorization. If local state prevents merging, preserve it without blocking an independently safe remote integration.
 - Run the relevant validation again after any rebase or integration that changes the tested commit.
-- After remote integration, fetch the target again and verify the integrated task commit is its ancestor. Synchronize a safe local target when eligible, then remove the merged task worktree and local task branch unless the user asked to keep them. If the local target moved or contains user changes, skip only local synchronization; remote containment still proves the current task branch is safe to clean up.
+- After remote integration, fetch the target again and verify the integrated task commit is its ancestor. Synchronize a safe local target when eligible, then ask the [Cleanup Choice](#cleanup-choice). If the local target moved or contains user changes, skip only local synchronization; remote containment still proves the current task branch is safe to clean up.
 
 ## Local Auto-Merge
 
@@ -96,7 +96,11 @@ If the target is already an ancestor of the tested task commit, run `git -C <tar
 
 If the target advanced, inspect both ranges. For an unshared task branch with an attributable task base, replay only task commits using `git rebase --onto <local-target> <task-base> <task-branch>`, resolve only conflicts whose result is established by task evidence, rerun affected checks and final-diff review, then retry `--ff-only`. Never rebase a shared task branch or rewrite the target. Stop this operation on ambiguous conflicts or repeated target movement; preserve the task and report the concrete blocker.
 
-Verify `git merge-base --is-ancestor <task-commit> <local-target>` after integration. Report local and remote integration separately. When remote integration is unauthorized, finish with "merged locally; not pushed", rather than requesting permission for an optional push. Retain the task branch/worktree until any already-authorized remote integration finishes; otherwise a clean, inactive current-task worktree and branch may be removed after verified local containment, unless the user asked to keep them. Never delete a branch without verified containment or force-remove a worktree.
+Verify `git merge-base --is-ancestor <task-commit> <local-target>` after integration. Report local and remote integration separately. When remote integration is unauthorized, finish with "merged locally; not pushed", rather than requesting permission for an optional push. Retain the task branch/worktree until any already-authorized remote integration finishes; after verified containment, ask the [Cleanup Choice](#cleanup-choice) instead of removing them. Never delete a branch without verified containment or force-remove a worktree.
+
+## Cleanup Choice
+
+After the task commit is verified in its local or remote target, do not remove the current-task worktree or branch on your own. Ask through the structured input tool (`AskUserQuestion` in Claude Code; background jobs also write a `needs input:` line) with two options: `清理 worktree 和本地分支` and `保留`. On `清理`, recheck that the worktree is clean and contained, then run `git worktree remove <path>` and `git branch -d <task-branch>`; never force either. On `保留` or no answer, keep both and report their path and branch. An explicit cleanup request in the current task already answers the question.
 
 ## Periodic Stale Cleanup
 
@@ -121,6 +125,8 @@ If the task branch already exists on a remote, treat it as shared: do not automa
 
 Remote integration uses the latest remote target as its source of truth. It does not require checking out, repairing, or merging through a local target branch.
 
+Task branches stay local. Never push a `codex/*`, `claude/*`, or `pi/*` task branch to a remote, whether for backup, review, or the end of a background job; update the target directly with `git push origin <task-branch>:<target-branch>`. Only a user-authorized [MR Flow](#mr-flow) may publish the source branch, and it deletes that remote branch after merge. When the target is persistently authorized and the gates below pass, integration is part of finishing the task, not a follow-up request.
+
 For UI-affecting work, an explicit current-task push request, including push-only or commit-and-push wording, permits continuing without unrequested browser acceptance after project-required validation and integration preflight. Do not ask separately whether acceptance was completed. Follow [Browser Acceptance](harness-engineering.md#browser-acceptance) to record the actual evidence and the request as integration basis; do not turn the request into a passing test result. This does not override a required project approval, expressly required acceptance, or a known unresolved failure. The push request does not authorize production operations, tags, force pushes, other remotes, or MR/PR creation or merge; their existing authorization rules still apply.
 
 ### High-confidence auto-integration
@@ -135,7 +141,7 @@ These gates govern remote integration; local completion follows [Local Auto-Merg
 6. Preflight returns `DIRECT_FF`, a safely handled `REBASE_THEN_FF`, or `ALREADY_INTEGRATED`.
 7. The change has no production, tag, force-push, other-remote, data-migration, permission, security-sensitive, or unauthorized external side effect.
 
-For qualifying work, record integration basis as `high-confidence-policy` and save the automatic-check results, static final-diff review, and target branch as evidence. Record actual browser acceptance separately under [Browser Acceptance](harness-engineering.md#browser-acceptance). This policy does not override required project approval, expressly required acceptance, or known unresolved failures. Then complete validation, commit, preflight, normal non-forced push when needed, remote ancestry verification, applicable post-integration validation, and task worktree/branch cleanup. A failed check, doubtful review, skipped critical check, dirty or unisolated worktree, ineligible or prohibited target, excluded side effect, `STOP`, or `MR_REQUIRED` stops auto-integration and retains the task worktree. `MR_REQUIRED` is report-only unless the user separately authorizes the MR/PR flow.
+For qualifying work, record integration basis as `high-confidence-policy` and save the automatic-check results, static final-diff review, and target branch as evidence. Record actual browser acceptance separately under [Browser Acceptance](harness-engineering.md#browser-acceptance). This policy does not override required project approval, expressly required acceptance, or known unresolved failures. Then complete validation, commit, preflight, normal non-forced push when needed, remote ancestry verification, applicable post-integration validation, and the [Cleanup Choice](#cleanup-choice). A failed check, doubtful review, skipped critical check, dirty or unisolated worktree, ineligible or prohibited target, excluded side effect, `STOP`, or `MR_REQUIRED` stops auto-integration and retains the task worktree. `MR_REQUIRED` is report-only unless the user separately authorizes the MR/PR flow.
 
 Normal non-forced updates to `origin/dev`, `origin/develop`, `origin/test`, and `origin/uat` have built-in persistent authorization after project-required validation and preflight pass. This authorization includes known non-production CI and deployment effects triggered by those branch updates.
 
@@ -170,7 +176,7 @@ A project rule or current-task instruction such as "do not push" overrides every
    - On non-fast-forward rejection, fetch and rerun preflight against the new remote target. Revalidate after any resulting rebase. Stop if target movement repeatedly prevents a stable update.
    - On an explicit protected-branch or MR-only rejection, report `MR_REQUIRED` and pause. Enter the MR flow only after separate user authorization.
    - On authentication failure, missing permission, unknown hook rejection, or transport failure, stop and report the exact error. Do not assume an MR will bypass it.
-6. After a direct push, fetch the target, verify the integrated task commit is its ancestor, and run the applicable post-integration validation. Fast-forward a clean local target only if it still points to the task base, then remove the merged current-task worktree and branch. Skip unsafe local synchronization without touching user state.
+6. After a direct push, fetch the target, verify the integrated task commit is its ancestor, and run the applicable post-integration validation. Fast-forward a clean local target only if it still points to the task base, then ask the [Cleanup Choice](#cleanup-choice). Skip unsafe local synchronization without touching user state.
 
 ### MR Flow
 

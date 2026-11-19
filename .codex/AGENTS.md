@@ -83,6 +83,8 @@ Normal non-forced pushes to `origin/dev`, `origin/develop`, `origin/test`, and `
 
 Validated commits and [Local Auto-Merge](docs/workflows/git-worktree.md#local-auto-merge) are default completion steps; do not wait for another merge prompt. Local `main/master` merges do not grant remote push permission. Complete separately authorized remote integration automatically. `STOP` and `MR_REQUIRED` block the affected integration operation; retain the worktree and report the reason. Stale cleanup follows the workflow's periodic cadence and clean/merged/inactive checks, not every task.
 
+Task branches (`codex/*`, `claude/*`, `pi/*`) stay local: never push them to a remote, including for backup or at the end of a background job; integrate by pushing the validated commit straight to the target (`git push origin <task-branch>:<target>`). The only exception is a user-authorized MR/PR flow that needs a source branch. When the target is persistently authorized (such as `origin/uat`) and the [High-confidence](docs/workflows/git-worktree.md#high-confidence-auto-integration) gates pass, merge and push it as part of finishing the task; do not stop at "ready to merge", and unrequested browser acceptance does not block it. After integration, do not remove the task worktree or branch on your own: ask through the structured input tool with the choices `清理 worktree 和本地分支` and `保留`, and act only on the answer.
+
 ## Subagent Delegation
 
 主 agent 默认直接完成工作，强制委派保持暂停。仅当运行时允许，且用户明确要求，或独立、边界清晰、可验证的并行任务能实质缩短等待时使用子代理。不恢复旧 Worker 协议或固定派发配额。
