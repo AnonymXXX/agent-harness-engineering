@@ -91,6 +91,12 @@ Validated commits and [Local Auto-Merge](docs/workflows/git-worktree.md#local-au
 
 Use `uv run` or the project's `.venv/bin/python` / `venv/bin/python`; do not assume bare `python` or `python3` has project packages. Discover interpreters with `uv python list --only-installed` and install with `uv python install <version>`. Keep machine version inventories out of instructions.
 
+## Image Generation
+
+- 生图默认用 `baoyu-image-gen --provider codex-cli`，Codex 模型固定为 `gpt-6.1-sol`、reasoning `high`、不开 fast，出了新版 sol 也不换（2026-11-19 用户定）。该脚本没有模型参数，用 PATH 前置垫片 `~/.local/share/agent-shims/codex-imagegen/codex` 注入。
+- 需要游戏、界面等素材（单个角色、道具、图标、贴图）时，让 Codex 直接生成透明背景 PNG（提示词写明要 alpha 通道、背景完全透明、不要画地面和阴影底色），不要先出纯色底再抠图；场景图、整页效果图不在此列。
+- 每次生成图片后，用 `open` 在用户电脑上打开预览给用户看：单张直接打开，一批候选打开对比图或全部候选，回复里给出完整路径。
+
 ## Documentation And Harness Health
 
 [Harness Engineering](docs/workflows/harness-engineering.md) owns automatic durable-knowledge capture and its Capture Gate; explicitly requested documentation work is already in scope. Use [Document Gardening](docs/workflows/document-gardening.md) when editing durable rules. Preserve business invariants and authorization boundaries; do not write speculative decisions or secrets as project truth.
