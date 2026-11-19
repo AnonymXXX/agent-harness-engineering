@@ -2,19 +2,23 @@
 
 [简体中文](README.md) | **English**
 
-A versioned engineering workflow for coding agents (Codex, Claude Code, pi). It helps the agent choose an execution approach based on
-task risk, route work to the appropriate skills, isolate medium- and high-risk changes when needed,
-perform proportionate validation, and preserve only project knowledge that should remain durable.
+A versioned engineering workflow for coding agents (Codex, Claude Code, Pi). It helps the agent choose
+an execution approach based on task risk, route work to the appropriate skills, isolate medium- and
+high-risk changes when needed, perform proportionate validation, and preserve only project knowledge
+that should remain durable.
 
-You do not need to read every rule first. The recommended starting point is to open or reference
-this repository in Codex, ask Codex to explain whether it fits your workflow, and then decide
-whether to install it.
+All three agents share one set of global rules, `.codex/AGENTS.md`; platform differences live in
+adapter files.
 
-## Recommended: Ask Codex Directly
+You do not need to read every rule first. The recommended starting point is to have the agent you
+already use read this repository, explain whether it fits your workflow, and then decide whether to
+adopt it.
+
+## Recommended: Let Your Agent Read It First
 
 ### 1. Understand the repository
 
-Send this to Codex:
+Send this to Codex, Claude Code, or Pi:
 
 ```text
 Read AnonymXXX/agent-harness-engineering and explain what this repository does, which problems it
@@ -22,56 +26,58 @@ solves, its core components, who it is for, and its limitations. Cite specific f
 repository as evidence instead of only repeating the README.
 ```
 
-If the repository is already open in Codex, replace its name with "the current repository."
+If the repository is already open in your agent, replace its name with "the current repository."
 
 ### 2. Analyze the benefits and changes for you
 
-Ask Codex to compare the Harness with the configuration and usage context currently available to it:
+Ask the agent to compare the Harness with the configuration and usage context currently available to it:
 
 ```text
 Read this repository. Within the scope I authorize and that the current environment can access,
-inspect my Codex configuration, installed skills, workflows, and recent usage records. Analyze how
-my daily Codex usage would change if I adopted this Harness Engineering setup.
+inspect my agent configuration (the rule- and skill-related parts of ~/.codex, ~/.claude, and
+~/.pi/agent), installed skills, workflows, and recent usage records. Analyze how my daily usage
+would change if I adopted this Harness Engineering setup.
 
 Organize the result as "Current state, Changes after adoption, Practical benefits, Costs or risks,
 Recommendation." Cite specific repository files as evidence. Clearly state which records you cannot
 access, and do not guess.
 ```
 
-Codex should compare at least these areas:
+The agent should compare at least these areas:
 
 | Area | Potential change after adoption |
 | --- | --- |
 | Risk control | Select Fast, Standard, or Heavy Lane checks and use isolated Git worktrees for medium- and high-risk tasks when needed. |
 | Skill routing | Choose focused workflows for code design, diagnosis, domain modeling, TDD, and related work. |
 | Validation | Run the smallest credible test, lint, build, or Doctor checks for the affected surface. |
-| Git and platform operations | Use reusable workflows for commits, GitHub operations, and releases with explicit stop conditions. |
+| Git and platform operations | Use reusable workflows for commits, GitHub operations, and releases with explicit stop conditions. Task branches stay local; validated work can be pushed straight to non-production branches such as `dev`, `test`, or `uat`, and the agent asks before cleaning up the worktree. |
 | Parallel execution | Subagent delegation is paused (2026-08-06); the main agent completes work directly, and the previous Worker protocol remains recoverable from Git history. |
 | Knowledge capture | Add only long-lived rules and decisions that pass the Capture Gate, reducing documentation noise. |
 | Recovery and upgrades | Keep a single source of truth through versioned configuration and symlinks; the historical one-command installer remains recoverable from Git history. |
 
 These are workflow capabilities, not mechanisms that every task must use. Simple tasks should remain lightweight.
 
-### 3. Ask Codex to adopt it safely
+### 3. Ask the agent to adopt it safely
 
-After deciding that it fits, Codex can perform the inspection, linking, and validation:
+After deciding that it fits, the agent can perform the inspection, linking, and validation:
 
 ```text
 Help me adopt AnonymXXX/agent-harness-engineering.
 
-First, inspect ~/.codex, ~/.agents/skills, the current Git state, and potential conflicts without
-making changes. Do not read, copy, or output credentials, sessions, memory, caches, or other
-sensitive runtime data.
+First, inspect ~/.codex, ~/.claude, ~/.pi/agent, ~/.agents/skills, the current Git state, and
+potential conflicts without making changes. Do not read, copy, or output credentials, sessions,
+memory, caches, or other sensitive runtime data.
 
 Before changing anything, list the affected files, backup strategy, dependencies, and risks. Do not
-create symlinks or rewrite files until I confirm. After confirmation, create the documented symlinks,
-then run the Skill index checks and Harness Doctor. Finally, summarize the actual changes, validation
-results, and whether I need to start a new Codex task to load the rules and skills.
+create symlinks or rewrite files until I confirm. After confirmation, create the documented symlinks
+only for the agents I actually use, then run the Skill index checks and Harness Doctor. Finally,
+summarize the actual changes, validation results, and whether I need to start a new session to load
+the rules and skills.
 ```
 
-Codex can analyze only content you explicitly authorize in the current task and that the local
+The agent can analyze only content you explicitly authorize in the current task and that the local
 environment can access. You must supply inaccessible history, remote data, or configuration from
-other devices; Codex should not infer conclusions from missing information.
+other devices; the agent should not infer conclusions from missing information.
 
 ## Skill Set
 
@@ -82,41 +88,72 @@ other devices; Codex should not infer conclusions from missing information.
 
 ## Installation
 
-If this machine is already installed, use it directly. To set up a new machine, first install Codex
-CLI, Git, `uv`, and GitHub CLI on macOS, then create the Harness symlinks manually.
-Browser work defaults to the `magpie-browser` MCP (install magpie and register it in Codex and Claude); Codex's Browser/Chrome plugins or Claude's built-in browser and Claude in Chrome are fallbacks only:
+These steps target macOS. Install Git, `uv`, GitHub CLI, and at least one agent (Codex CLI, Claude
+Code, or Pi), then create the symlinks manually. The shared part for every agent:
 
 ```bash
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering
-ln -s ~/.local/share/agent-harness-engineering/.codex/AGENTS.md ~/.codex/AGENTS.md
-ln -s ~/.local/share/agent-harness-engineering/.codex/docs ~/.codex/docs
-ln -s ~/.local/share/agent-harness-engineering/.codex/hooks.json ~/.codex/hooks.json
-mkdir -p ~/.claude/rules
-ln -s ~/.local/share/agent-harness-engineering/.claude/rules/harness-platform-adapter.md ~/.claude/rules/
-git -C ~/.local/share/agent-harness-engineering config core.hooksPath .githooks
-for skill in ~/.local/share/agent-harness-engineering/.agents/skills/*; do
+H=~/.local/share/agent-harness-engineering
+mkdir -p ~/.codex ~/.agents/skills
+ln -s $H/.codex/AGENTS.md ~/.codex/AGENTS.md
+ln -s $H/.codex/docs ~/.codex/docs
+git -C $H config core.hooksPath .githooks
+for skill in $H/.agents/skills/*; do
   ln -s "$skill" ~/.agents/skills/
 done
+```
+
+Then add the part for each agent you use:
+
+```bash
+# Codex: commit-message check hook (active after you trust it in Codex's /hooks)
+ln -s $H/.codex/hooks.json ~/.codex/hooks.json
+
+# Claude Code: global rules, platform adapter, and skill discovery links
+mkdir -p ~/.claude/rules ~/.claude/skills
+ln -s ~/.codex/AGENTS.md ~/.claude/CLAUDE.md
+ln -s $H/.claude/rules/harness-platform-adapter.md ~/.claude/rules/
+for skill in $H/.agents/skills/*; do
+  ln -s "../../.agents/skills/$(basename "$skill")" ~/.claude/skills/
+done
+
+# Pi: global rules (Pi reads skills from ~/.agents/skills directly; no extra links needed)
+mkdir -p ~/.pi/agent
+ln -s ~/.codex/AGENTS.md ~/.pi/agent/AGENTS.md
+```
+
+Finally, run the checks:
+
+```bash
 uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py index --write
 uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py index --check
 uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py doctor
 ```
 
-If a link target already exists, back it up with `/usr/bin/trash` before linking. The installer does
-not copy or overwrite the machine-specific `~/.codex/config.toml`, credentials, sessions, memory, or
-caches. After installation, start a new Codex task to load the global rules and skills.
+If a link target already exists, move it aside with `/usr/bin/trash` before linking. These steps do
+not copy or overwrite the machine-specific `~/.codex/config.toml`, `~/.claude/settings.json`,
+credentials, sessions, memory, or caches. Afterwards, start a new agent session to load the global
+rules and skills.
 
-`~/.claude/settings.json` holds machine settings and is not linked; merge the hooks from `.claude/settings.hooks.json` into it.
-`core.hooksPath` enables the pre-push check `scripts/check_private_markers.py`. It scans every commit being pushed and rejects the push on
-any match against the private denylist (default `~/.config/agent-harness/public-denylist.txt`, override with
-`HARNESS_PRIVATE_DENYLIST`), and also when that denylist is missing.
+- Browser work defaults to the `magpie-browser` MCP (install magpie and register it in each agent);
+  Codex's Browser/Chrome plugins or Claude's built-in browser and Claude in Chrome are fallbacks only.
+- `~/.claude/settings.json` holds machine settings and is not linked; merge the hooks from
+  `.claude/settings.hooks.json` into it.
+- Pi's platform adapter and commit-message check extension are not yet included in this repository;
+  use `.claude/rules/harness-platform-adapter.md` as a reference if you need them.
+- `core.hooksPath` enables the pre-push check `scripts/check_private_markers.py`. It scans every
+  commit being pushed and rejects the push on any match against the private denylist (default
+  `~/.config/agent-harness/public-denylist.txt`, override with `HARNESS_PRIVATE_DENYLIST`), and also
+  when that denylist is missing.
 
 Historical releases provide the one-command installer `scripts/harness_setup.py` and `profiles.json`.
 To automate installation, restore those two files from Git history and follow the README of that era.
 
 ## Rule Provenance
 
-Adapted from the [official GPT-6 Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices), verified 2026-09-09. Its eleven examples map to this Harness as follows; these are task-dependent defaults, not eleven mandatory steps:
+Adapted from the [official GPT-6 Astra prompting guidance](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices), verified 2026-09-09.
+Its eleven examples map to this Harness as follows; these are task-dependent defaults, not eleven
+mandatory steps:
 
 | Official examples | Harness application |
 | --- | --- |
@@ -128,7 +165,7 @@ Adapted from the [official GPT-6 Astra prompting guidance](https://developers.op
 
 ## Layout
 
-- `.codex/`: global agent rules, Harness workflow documents, and the Codex hook configuration.
+- `.codex/`: global rules shared by all three agents, Harness workflow documents, and the Codex hook configuration.
 - `.claude/`: the Claude Code platform adapter and hook fragment.
 - `scripts/`, `.githooks/`: the public repository's pre-push private-marker check.
 - `.agents/skills/`: the Harness skill family and its executable checks.
@@ -146,6 +183,6 @@ to their identified paths and local derivatives.
 
 ## Support
 
-If this project improves your Codex workflow, you can support its ongoing maintenance on
+If this project improves your agent workflow, you can support its ongoing maintenance on
 [Afdian](https://afdian.com/a/codexharness). Sponsorship is optional and does not change the
 repository's open-source availability or include paid technical support.
