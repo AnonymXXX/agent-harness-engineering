@@ -43,8 +43,8 @@ HARNESS_SKILLS = {
 HARNESS_INVOCATION_POLICY = {
     "harness-engineering": True,
 }
-# Task branch prefixes per agent: Codex, Claude Code, pi.
-AGENT_BRANCH_PREFIXES = ("codex/", "claude/", "pi/")
+# Task branch prefixes per agent: Codex, Claude Code, pi, Antigravity CLI (agy).
+AGENT_BRANCH_PREFIXES = ("codex/", "claude/", "pi/", "agy/")
 # Records when `cleanup` last succeeded per repository, so `--if-due` can skip recent runs.
 CLEANUP_STATE_FILE = Path.home() / ".agents" / "state" / "harness-cleanup.json"
 WORKTREE_DEBT_STATES = {

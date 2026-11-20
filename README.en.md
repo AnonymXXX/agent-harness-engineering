@@ -2,12 +2,12 @@
 
 [简体中文](README.md) | **English**
 
-A versioned engineering workflow for coding agents (Codex, Claude Code, Pi). It helps the agent choose
+A versioned engineering workflow for coding agents (Codex, Claude Code, Pi, Antigravity CLI). It helps the agent choose
 an execution approach based on task risk, route work to the appropriate skills, isolate medium- and
 high-risk changes when needed, perform proportionate validation, and preserve only project knowledge
 that should remain durable.
 
-All three agents share one set of global rules, `.codex/AGENTS.md`; platform differences live in
+All four agents share one set of global rules, `.codex/AGENTS.md`; platform differences live in
 adapter files.
 
 You do not need to read every rule first. The recommended starting point is to have the agent you
@@ -18,7 +18,7 @@ adopt it.
 
 ### 1. Understand the repository
 
-Send this to Codex, Claude Code, or Pi:
+Send this to Codex, Claude Code, Pi, or Antigravity CLI:
 
 ```text
 Read AnonymXXX/agent-harness-engineering and explain what this repository does, which problems it
@@ -34,8 +34,8 @@ Ask the agent to compare the Harness with the configuration and usage context cu
 
 ```text
 Read this repository. Within the scope I authorize and that the current environment can access,
-inspect my agent configuration (the rule- and skill-related parts of ~/.codex, ~/.claude, and
-~/.pi/agent), installed skills, workflows, and recent usage records. Analyze how my daily usage
+inspect my agent configuration (the rule- and skill-related parts of ~/.codex, ~/.claude,
+~/.pi/agent, and ~/.gemini), installed skills, workflows, and recent usage records. Analyze how my daily usage
 would change if I adopted this Harness Engineering setup.
 
 Organize the result as "Current state, Changes after adoption, Practical benefits, Costs or risks,
@@ -64,7 +64,7 @@ After deciding that it fits, the agent can perform the inspection, linking, and 
 ```text
 Help me adopt AnonymXXX/agent-harness-engineering.
 
-First, inspect ~/.codex, ~/.claude, ~/.pi/agent, ~/.agents/skills, the current Git state, and
+First, inspect ~/.codex, ~/.claude, ~/.pi/agent, ~/.gemini, ~/.agents/skills, the current Git state, and
 potential conflicts without making changes. Do not read, copy, or output credentials, sessions,
 memory, caches, or other sensitive runtime data.
 
@@ -89,7 +89,7 @@ other devices; the agent should not infer conclusions from missing information.
 ## Installation
 
 These steps target macOS. Install Git, `uv`, GitHub CLI, and at least one agent (Codex CLI, Claude
-Code, or Pi), then create the symlinks manually. The shared part for every agent:
+Code, Pi, or Antigravity CLI), then create the symlinks manually. The shared part for every agent:
 
 ```bash
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering
@@ -125,6 +125,16 @@ mkdir -p ~/.pi/agent/extensions
 ln -s ~/.codex/AGENTS.md ~/.pi/agent/AGENTS.md
 ln -s $H/.pi/agent/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md
 ln -s $H/.pi/agent/extensions/commit-message-check.ts ~/.pi/agent/extensions/
+
+# Antigravity CLI (agy): global rules, platform adapter rule, commit-message check hook, and skill discovery links
+mkdir -p ~/.gemini/config/rules ~/.gemini/config/skills
+ln -s ~/.codex/AGENTS.md ~/.gemini/AGENTS.md
+ln -s $H/.gemini/config/rules/harness-platform-adapter.md ~/.gemini/config/rules/
+ln -s $H/.gemini/config/hooks.json ~/.gemini/config/hooks.json
+ln -s $H/.gemini/config/commit-message-check.py ~/.gemini/config/
+for skill in $H/.agents/skills/*; do
+  ln -s "../../../.agents/skills/$(basename "$skill")" ~/.gemini/config/skills/
+done
 ```
 
 Finally, run the checks:
@@ -140,8 +150,12 @@ not copy or overwrite the machine-specific `~/.codex/config.toml`, `~/.claude/se
 credentials, sessions, memory, or caches. Afterwards, start a new agent session to load the global
 rules and skills.
 
-- Browser work defaults to the `magpie-browser` MCP (install magpie and register it in each agent);
-  Codex's Browser/Chrome plugins or Claude's built-in browser and Claude in Chrome are fallbacks only.
+- Browser work defaults to the `magpie-browser` MCP (install magpie and register it in each agent; for agy,
+  in `~/.gemini/config/mcp_config.json`); Codex's Browser/Chrome plugins, Claude's built-in browser and Claude
+  in Chrome, or Antigravity's own browser tools are fallbacks only.
+- agy reads only `~/.gemini/` and not `~/.agents/skills`, so skills need discovery links under
+  `~/.gemini/config/skills/`. Hooks added through `/hooks` land in the linked `hooks.json`; keep machine-only
+  hooks in a workspace `.agents/hooks.json` instead.
 - `~/.claude/settings.json` holds machine settings and is not linked; merge the hooks from
   `.claude/settings.hooks.json` into it.
 - The image-generation rule's model shim lives in `.local/share/agent-shims/codex-imagegen/` and works with
@@ -171,9 +185,10 @@ mandatory steps:
 
 ## Layout
 
-- `.codex/`: global rules shared by all three agents, Harness workflow documents, the `DESIGN.md` template, and the Codex hook configuration.
+- `.codex/`: global rules shared by all four agents, Harness workflow documents, the `DESIGN.md` template, and the Codex hook configuration.
 - `.claude/`: the Claude Code platform adapter and hook fragment.
 - `.pi/`: the Pi platform adapter and commit-message check extension.
+- `.gemini/`: the Antigravity CLI platform adapter rule and commit-message check hook.
 - `.local/share/agent-shims/`: the image-generation model shim.
 - `scripts/`, `.githooks/`: the public repository's pre-push private-marker check.
 - `.agents/skills/`: the Harness skill family and its executable checks.

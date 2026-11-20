@@ -2,10 +2,10 @@
 
 **简体中文** | [English](README.en.md)
 
-一套给编程 Agent（Codex、Claude Code、Pi）用的可版本化工程工作流：让 Agent 按任务风险选择执行方式，
+一套给编程 Agent（Codex、Claude Code、Pi、Antigravity CLI）用的可版本化工程工作流：让 Agent 按任务风险选择执行方式，
 调用合适的 Skill，必要时隔离中高风险修改，完成相称的验证，并只沉淀真正需要长期保留的项目知识。
 
-三个 Agent 共用同一份全局规则 `.codex/AGENTS.md`，各平台的差异写在适配文件里。
+四个 Agent 共用同一份全局规则 `.codex/AGENTS.md`，各平台的差异写在适配文件里。
 
 你不需要先读完所有规则。推荐直接让你常用的 Agent 阅读本仓库，由它解释是否适合你的使用方式，
 再决定是否接入。
@@ -14,7 +14,7 @@
 
 ### 1. 了解这个仓库
 
-在 Codex、Claude Code 或 Pi 中发送：
+在 Codex、Claude Code、Pi 或 Antigravity CLI 中发送：
 
 ```text
 请阅读 AnonymXXX/agent-harness-engineering，告诉我这个仓库是干什么的、解决了什么问题、
@@ -30,7 +30,7 @@
 
 ```text
 请阅读这个仓库，并在我授权且当前环境可访问的范围内，检查我的 Agent 配置（~/.codex、
-~/.claude、~/.pi/agent 中与规则和 Skill 相关的部分）、已安装 Skills、工作流和近期使用记录。
+~/.claude、~/.pi/agent、~/.gemini 中与规则和 Skill 相关的部分）、已安装 Skills、工作流和近期使用记录。
 分析如果接入这套 Harness Engineering，我的日常使用会发生什么变化。
 
 请按“当前状态、接入后变化、实际收益、成本或风险、是否建议接入”输出，并引用仓库中的
@@ -58,7 +58,7 @@ Agent 应重点比较以下方面：
 ```text
 请帮我接入 AnonymXXX/agent-harness-engineering。
 
-先只读检查 ~/.codex、~/.claude、~/.pi/agent、~/.agents/skills、当前 Git 状态和可能冲突。
+先只读检查 ~/.codex、~/.claude、~/.pi/agent、~/.gemini、~/.agents/skills、当前 Git 状态和可能冲突。
 不要读取、复制或输出凭据、sessions、memory、cache 或其他敏感运行时数据。
 
 修改前列出会影响的文件、备份策略、依赖和风险。在我确认前不要创建符号链接或改写文件。
@@ -78,8 +78,8 @@ Agent 只能分析当前任务中你明确授权且本机可访问的内容。�
 
 ## 安装
 
-以下步骤以 macOS 为准。先安装 Git、`uv`、GitHub CLI，以及至少一个 Agent（Codex CLI、Claude Code
-或 Pi），然后手动创建符号链接。所有 Agent 共用的部分：
+以下步骤以 macOS 为准。先安装 Git、`uv`、GitHub CLI，以及至少一个 Agent（Codex CLI、Claude Code、
+Pi 或 Antigravity CLI），然后手动创建符号链接。所有 Agent 共用的部分：
 
 ```bash
 gh repo clone AnonymXXX/agent-harness-engineering ~/.local/share/agent-harness-engineering
@@ -115,6 +115,16 @@ mkdir -p ~/.pi/agent/extensions
 ln -s ~/.codex/AGENTS.md ~/.pi/agent/AGENTS.md
 ln -s $H/.pi/agent/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md
 ln -s $H/.pi/agent/extensions/commit-message-check.ts ~/.pi/agent/extensions/
+
+# Antigravity CLI（agy）：全局规则、平台适配规则、提交信息检查 hook 和 Skill 发现链接
+mkdir -p ~/.gemini/config/rules ~/.gemini/config/skills
+ln -s ~/.codex/AGENTS.md ~/.gemini/AGENTS.md
+ln -s $H/.gemini/config/rules/harness-platform-adapter.md ~/.gemini/config/rules/
+ln -s $H/.gemini/config/hooks.json ~/.gemini/config/hooks.json
+ln -s $H/.gemini/config/commit-message-check.py ~/.gemini/config/
+for skill in $H/.agents/skills/*; do
+  ln -s "../../../.agents/skills/$(basename "$skill")" ~/.gemini/config/skills/
+done
 ```
 
 最后检查：
@@ -129,8 +139,11 @@ uv run ~/.agents/skills/harness-engineering/scripts/harness_doctor.py doctor
 `~/.codex/config.toml`、`~/.claude/settings.json`、凭据、sessions、memory 或 cache。
 完成后新开一个 Agent 会话，以加载全局规则和 Skills。
 
-- 浏览器默认使用 `magpie-browser` MCP（需安装 magpie 并在各 Agent 中注册），不可用时才回退到
-  Codex 的 Browser/Chrome 插件或 Claude 的内置浏览器与 Claude in Chrome。
+- 浏览器默认使用 `magpie-browser` MCP（需安装 magpie 并在各 Agent 中注册；agy 写在
+  `~/.gemini/config/mcp_config.json`），不可用时才回退到 Codex 的 Browser/Chrome 插件、Claude 的内置浏览器与
+  Claude in Chrome，或 Antigravity 自带的浏览器工具。
+- agy 只读 `~/.gemini/` 下的配置，不读 `~/.agents/skills`，所以 Skill 要在 `~/.gemini/config/skills/` 建发现链接；
+  `/hooks` 新加的 hook 会写进链接到仓库的 `hooks.json`，本机专用的 hook 改放工作区 `.agents/hooks.json`。
 - `~/.claude/settings.json` 含本机设置，不做链接；把 `.claude/settings.hooks.json` 中的 hook 合并进去即可。
 - 生图规则用到的模型垫片在 `.local/share/agent-shims/codex-imagegen/`，配合第三方 Skill `baoyu-image-gen` 使用；
   需要时执行 `mkdir -p ~/.local/share/agent-shims && ln -s $H/.local/share/agent-shims/codex-imagegen ~/.local/share/agent-shims/`。
@@ -156,9 +169,10 @@ Git 历史恢复这两个文件后按当时的 README 使用。
 
 ## 目录结构
 
-- `.codex/`：三个 Agent 共用的全局规则、Harness 工作流文档、`DESIGN.md` 模板与 Codex hook 配置。
+- `.codex/`：四个 Agent 共用的全局规则、Harness 工作流文档、`DESIGN.md` 模板与 Codex hook 配置。
 - `.claude/`：Claude Code 平台适配规则与 hook 片段。
 - `.pi/`：Pi 平台适配说明与提交信息检查扩展。
+- `.gemini/`：Antigravity CLI 平台适配规则与提交信息检查 hook。
 - `.local/share/agent-shims/`：生图用的模型垫片。
 - `scripts/`、`.githooks/`：公开仓库的推送前私有信息检查。
 - `.agents/skills/`：Harness Skill 系列及其可执行检查。

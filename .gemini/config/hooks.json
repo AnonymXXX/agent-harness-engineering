@@ -1,0 +1,16 @@
+{
+  "commit-message-check": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.gemini/config/commit-message-check.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
