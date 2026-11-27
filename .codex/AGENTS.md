@@ -99,7 +99,7 @@ Use `uv run` or the project's `.venv/bin/python` / `venv/bin/python`; do not ass
 - 选 Codex：`baoyu-image-gen --provider codex-cli`，模型固定为 `gpt-6.1-sol`、reasoning `high`、不开 fast，出了新版 sol 也不换（2026-11-19 用户定）。该脚本没有模型参数，用 PATH 前置垫片 `~/.local/share/agent-shims/codex-imagegen/codex` 注入。
 - 选 Gemini：用 `gemini-image-gen` skill（Nano Banana 2.1，key 在钥匙串 `gemini-api-key`），先出一张给用户看效果再批量。
 - 需要游戏、界面等素材（单个角色、道具、图标、贴图）时：Codex 直接生成透明背景 PNG（提示词写明要 alpha 通道、背景完全透明、不要画地面和阴影底色），不要先出纯色底再抠图；Gemini 给不了透明，按 skill 里的表出纯白 / 绿幕 / 品红底再抠。场景图、整页效果图不在此列。
-- 每次生成图片后，用 `open` 在用户电脑上打开预览给用户看：单张直接打开，一批候选打开对比图或全部候选，回复里给出完整路径。
+- 生成图片后不用 `open` 打开预览（2026-11-27 用户定），回复里给出完整路径；一批候选照样拼对比图，给对比图路径。
 
 ## Documentation And Harness Health
 
